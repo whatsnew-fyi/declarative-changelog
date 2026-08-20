@@ -41,18 +41,20 @@ export function checkRelations(model: ChangelogModel, ctx: RelationContext = {})
     const target = entry.supersededBy;
     if (target === undefined) continue;
 
-    const resolves =
-      versions.has(normalize(target)) ||
-      ids.has(target) ||
-      ctx.archive?.versions.has(normalize(target)) ||
-      ctx.archive?.ids.has(target);
+    // In-document resolution lands on an entry, or on the entry covering the
+    // named version. The archive chain is deliberately the soft case.
+    const inDocument =
+      versions.has(normalize(target)) || ids.has(target) || covered.has(normalize(target));
+    const inArchive =
+      ctx.archive !== undefined &&
+      (ctx.archive.versions.has(normalize(target)) || ctx.archive.ids.has(target));
 
-    if (!resolves) {
-      if (covered.has(normalize(target))) {
+    if (!inDocument) {
+      if (inArchive) {
         out.push({
-          rule: "relation/superseded-by-unresolved",
-          severity: "error",
-          message: `\`superseded-by: ${target}\` names a version that is only *covered* by another entry — it must name an entry that exists`,
+          rule: "relation/superseded-by-archive-only",
+          severity: "warning",
+          message: `\`superseded-by: ${target}\` resolves only through the archive chain at \`document.older\``,
           position: entry.hatch?.position ?? entry.position,
         });
       } else if (model.frontmatter.document.older !== undefined && ctx.archive === undefined) {
@@ -66,11 +68,11 @@ export function checkRelations(model: ChangelogModel, ctx: RelationContext = {})
         out.push({
           rule: "relation/superseded-by-unresolved",
           severity: "error",
-          message: `\`superseded-by: ${target}\` does not name an entry that exists — a dangling superseded-by is a validation error, not a hint`,
+          message: `\`superseded-by: ${target}\` does not name an entry that exists — dangling in-document is an error, not a hint`,
           position: entry.hatch?.position ?? entry.position,
         });
       }
-      continue;
+      if (!inArchive) continue;
     }
 
     // Meaningful only when the successor is not simply the next entry.

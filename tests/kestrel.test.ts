@@ -17,9 +17,10 @@ describe("the spec's reference example", () => {
     expect(result.level).toBe(1);
   });
 
-  it("skips Unreleased and the annotation section without flagging them as release-like", () => {
+  it("skips Unreleased and the annotation section — dateless, so not candidates", () => {
     expect(result.model.skipped).toHaveLength(2);
-    expect(result.model.skipped.every((s) => !s.smellsLikeRelease)).toBe(true);
+    expect(result.model.skipped.every((s) => !s.candidate)).toBe(true);
+    expect(result.skipped).toEqual({ headings: 2, candidates: 0 });
   });
 
   const view = parseChangelog(source, "kestrel.md");
@@ -54,10 +55,24 @@ describe("the spec's reference example", () => {
     expect(byId.get("kestrel@3.0.0-rc.1")!.changes.filter((c) => c.breaking)).toHaveLength(2);
   });
 
-  it("falls back to canonical + anchor for the linkless 2.0.1", () => {
-    expect(byId.get("kestrel@2.0.1")!.url).toBe(
-      "https://kestrel.example/changelog#201--2026-02-14",
-    );
+  it("falls back to canonical for the linkless 2.0.1 — never a fabricated fragment", () => {
+    expect(byId.get("kestrel@2.0.1")!.url).toBe("https://kestrel.example/changelog");
+  });
+
+  it("detaches the security item's reference tail into structured references", () => {
+    const security = byId.get("kestrel@2.4.0")!.changes.find((c) => c.category === "Security")!;
+    expect(security.references).toContainEqual({
+      kind: "cve",
+      text: "CVE-2026-31882",
+      url: "https://kestrel.example/security/CVE-2026-31882",
+    });
+    expect(security.text).toContain("Reported by @finch.");
+  });
+
+  it("attributes covered-version items in 2.3.0", () => {
+    const fixed = byId.get("kestrel@2.3.0")!.changes.filter((c) => c.category === "Fixed");
+    expect(fixed.map((c) => c.attributedTo)).toEqual([undefined, "2.3.1", "2.3.2"]);
+    expect(fixed[1]!.text).toMatch(/^the installer no longer fails/);
   });
 
   it("platforms default from product.platforms", () => {

@@ -40,22 +40,24 @@ describe("escape hatch value validation", () => {
 });
 
 describe("date edge cases", () => {
-  it("accepts offsets and fractional seconds", () => {
+  it("accepts offsets and fractional seconds, case-insensitive T and Z", () => {
     const result = validate("## 2.4.0 — 2026-07-09T10:00:00+02:00\n\nBody.");
     expect(result.counts.error).toBe(0);
-    expect(result.diagnostics.map((d) => d.rule)).not.toContain("heading/offset-missing");
     expect(validate("## 2.4.0 — 2026-07-09T10:00:00.500Z\n\nBody.").counts.error).toBe(0);
+    expect(validate("## 2.4.0 — 2026-07-09t10:00:00z\n\nBody.").counts.error).toBe(0);
   });
 
   it("rejects impossible times and offsets", () => {
-    expect(rules("## 2.4.0 — 2026-07-09T25:00\n\nBody.")).toContain("heading/invalid-date");
+    expect(rules("## 2.4.0 — 2026-07-09T25:00:00Z\n\nBody.")).toContain("heading/invalid-date");
     expect(rules("## 2.4.0 — 2026-07-09T10:00:00+15:00\n\nBody.")).toContain(
       "heading/invalid-date",
     );
   });
 
-  it("notes a time without an offset", () => {
-    expect(rules("## 2.4.0 — 2026-07-09T10:00\n\nBody.")).toContain("heading/offset-missing");
+  it("a time without seconds and an offset fails the grammar — a candidate error", () => {
+    expect(rules("## 2.4.0 — 2026-07-09T10:00\n\nBody.")).toContain(
+      "heading/candidate-does-not-parse",
+    );
   });
 
   it("leap years are real dates", () => {

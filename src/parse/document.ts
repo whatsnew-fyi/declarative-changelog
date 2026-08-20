@@ -17,7 +17,7 @@ import { type Diagnostic, LineIndex, type Position } from "../diagnostics.js";
 import type { HeadingDate } from "./date.js";
 import { parseIsoDate } from "./date.js";
 import { type EscapeHatch, parseEscapeHatch } from "./escape-hatch.js";
-import { type Frontmatter, parseFrontmatter } from "./frontmatter.js";
+import { type Frontmatter, parseFrontmatter, slugProductName } from "./frontmatter.js";
 import { type ParsedHeading, parseReleaseHeading } from "./heading.js";
 import { flattenInline } from "./inline.js";
 import { type ReducedChange, reduceChangeItem } from "./reduction.js";
@@ -71,12 +71,14 @@ export interface ReleaseEntry {
   supersededBy?: string;
   prerelease: boolean;
   id: string;
-  anchor: string;
 }
 
 export interface SkippedHeading {
   text: string;
-  smellsLikeRelease: boolean;
+  /** Contains a date, so it was almost certainly meant to be a release. */
+  candidate: boolean;
+  /** The diagnosed character-level reason a candidate failed to parse. */
+  nearMiss?: string;
   position: Position;
 }
 
@@ -130,7 +132,9 @@ export function buildModel(source: string, file: string): ChangelogModel {
       position: { line: 1, column: 1 },
     });
   }
-  model.productId = model.frontmatter.product.id ?? slug(model.frontmatter.product.name);
+  model.productId =
+    model.frontmatter.product.id ??
+    (model.frontmatter.product.name ? slugProductName(model.frontmatter.product.name) : undefined);
 
   // Split the document at depth-2 headings.
   let current: { heading: Heading; parsed: ParsedHeading; nodes: RootContent[] } | undefined;
@@ -165,11 +169,13 @@ export function buildModel(source: string, file: string): ChangelogModel {
       if (result.kind === "release") {
         current = { heading: node, parsed: result.heading, nodes: [] };
       } else {
-        model.skipped.push({
+        const skipped: SkippedHeading = {
           text: result.text,
-          smellsLikeRelease: result.smellsLikeRelease,
+          candidate: result.candidate,
           position: pos(node),
-        });
+        };
+        if (result.nearMiss !== undefined) skipped.nearMiss = result.nearMiss;
+        model.skipped.push(skipped);
       }
       continue;
     }
@@ -246,15 +252,19 @@ function buildEntry(
       continue;
     }
 
-    if (node.type === "blockquote" && !summary && sections.length === 0) {
+    // The summary is the blockquote *directly after* the heading or its hatch
+    // — position, not order. A blockquote anywhere else, and any blockquote
+    // opening with `[!` (a GitHub alert callout), is body.
+    if (node.type === "blockquote" && !sawContent && !summary) {
       const paragraphs = (node as Blockquote).children.filter((c) => c.type === "paragraph");
-      summary = {
-        text: paragraphs[0] ? collapse(flattenInline((paragraphs[0] as Paragraph).children)) : "",
-        paragraphCount: paragraphs.length,
-        position: pos(node),
-      };
-      sawContent = true;
-      continue;
+      const text = paragraphs[0]
+        ? collapse(flattenInline((paragraphs[0] as Paragraph).children))
+        : "";
+      if (!text.startsWith("[!")) {
+        summary = { text, paragraphCount: paragraphs.length, position: pos(node) };
+        sawContent = true;
+        continue;
+      }
     }
 
     bodyNodes.push(node);
@@ -272,7 +282,7 @@ function buildEntry(
           | undefined;
         const reduced: ReducedChange = firstParagraph
           ? reduceChangeItem(firstParagraph)
-          : { text: "", breaking: false };
+          : { text: "", breaking: false, references: [] };
         section.items.push({
           ...reduced,
           category: section.category,
@@ -284,22 +294,52 @@ function buildEntry(
     }
   }
 
-  // Effective values: the escape hatch overrides the heading.
+  // Effective values: where a key and the heading state the same fact, the
+  // hatch wins — one precedence rule, no exceptions. Winning is not license
+  // to disagree: contradicting a heading that parses cleanly draws a warning.
   const version = hatch?.version ? parseVersion(hatch.version) : parsed.version;
   const title = hatch?.title ?? parsed.title;
   const date = hatch?.date ? (parseIsoDate(hatch.date) ?? parsed.date) : parsed.date;
-  const url = parsed.url ?? hatch?.url;
+  const url = hatch?.url ?? parsed.url;
+
+  if (hatch) {
+    const contradictions: string[] = [];
+    if (hatch.version !== undefined && parsed.version !== undefined) {
+      if (normalizeVersion(hatch.version) !== normalizeVersion(parsed.version.raw)) {
+        contradictions.push(`version \`${hatch.version}\` vs \`${parsed.version.raw}\``);
+      }
+    }
+    if (hatch.title !== undefined && parsed.title !== undefined && hatch.title !== parsed.title) {
+      contradictions.push(`title \`${hatch.title}\` vs \`${parsed.title}\``);
+    }
+    if (
+      hatch.date !== undefined &&
+      parsed.date.valid &&
+      hatch.date.slice(0, 10) !== parsed.date.raw.slice(0, 10)
+    ) {
+      contradictions.push(`date \`${hatch.date}\` vs \`${parsed.date.raw}\``);
+    }
+    for (const contradiction of contradictions) {
+      diagnostics.push({
+        rule: "hatch/contradicts-heading",
+        severity: "warning",
+        message: `The escape hatch contradicts a heading that parses cleanly (${contradiction}) — a document whose human and machine readings diverge has reintroduced the disease this format treats`,
+        position: hatch.position,
+      });
+    }
+  }
 
   const tags = parsed.tags;
   const yanked = tags.includes("yanked" satisfies Tag);
   const routine = tags.includes("routine" satisfies Tag);
   const headingPlatforms = tags.filter((t) => isPlatformTag(t));
   const platforms =
-    headingPlatforms.length > 0
-      ? headingPlatforms
-      : (hatch?.platforms ?? model.frontmatter.product.platforms);
+    hatch?.platforms ??
+    (headingPlatforms.length > 0 ? headingPlatforms : model.frontmatter.product.platforms);
 
-  const versionKey = version?.raw.replace(/^v/, "");
+  // `v2.4.1` and `2.4.1` are the same version and the same identifier; the
+  // date portion only, even when the heading carries a time.
+  const versionKey = version ? normalizeVersion(version.raw) : undefined;
   const key = versionKey ?? date.raw.slice(0, 10);
   const id = hatch?.id ?? (model.productId ? `${model.productId}@${key}` : key);
 
@@ -318,7 +358,6 @@ function buildEntry(
     routine,
     prerelease: version?.prerelease !== undefined || (!version && hatch?.prerelease === true),
     id,
-    anchor: githubAnchor(parsed.text),
   };
   if (version) entry.version = version;
   if (title !== undefined) entry.title = title;
@@ -366,20 +405,6 @@ function collapse(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-function slug(name: string | undefined): string | undefined {
-  if (!name) return undefined;
-  const s = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return s === "" ? undefined : s;
-}
-
-// GitHub's slugger: lowercase, drop punctuation, then turn each space into its
-// own hyphen — adjacent spaces are NOT collapsed, so "2.0.1 — date" → "201--date".
-function githubAnchor(headingText: string): string {
-  return headingText
-    .toLowerCase()
-    .replace(/[^\w -]/g, "")
-    .replace(/ /g, "-");
+export function normalizeVersion(raw: string): string {
+  return raw.replace(/^v/, "");
 }

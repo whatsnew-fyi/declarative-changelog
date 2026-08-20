@@ -1,19 +1,21 @@
 export interface HeadingDate {
   raw: string;
   hasTime: boolean;
-  hasOffset: boolean;
   /** Whether the value names a real calendar date / time. */
   valid: boolean;
   /** Epoch milliseconds. A date-only value means midnight UTC, per the spec. */
   ms: number;
 }
 
+// `full-date ("T" partial-time time-offset)?` — when a time is present it
+// carries seconds and an offset, per the grammar. `T`/`Z` are case-insensitive,
+// per RFC 3339 itself.
 const DATE_RE =
-  /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/;
+  /^(\d{4})-(\d{2})-(\d{2})(?:[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?([Zz]|[+-]\d{2}:\d{2}))?$/;
 
 /** The same pattern, for locating a date anchored at the end of a longer string. */
 export const DATE_AT_END_RE =
-  /(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?)$/;
+  /(\d{4}-\d{2}-\d{2}(?:[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2}))?)$/;
 
 export function parseIsoDate(raw: string): HeadingDate | undefined {
   const m = DATE_RE.exec(raw);
@@ -30,20 +32,19 @@ export function parseIsoDate(raw: string): HeadingDate | undefined {
   let valid =
     mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth(y, mo) && h < 24 && mi < 60 && s < 60;
   let offsetMinutes = 0;
-  if (offset && offset !== "Z") {
+  if (offset && offset.toUpperCase() !== "Z") {
     const oh = Number(offset.slice(1, 3));
     const om = Number(offset.slice(4, 6));
     if (oh > 14 || om > 59) valid = false;
     offsetMinutes = (oh * 60 + om) * (offset.startsWith("-") ? -1 : 1);
   }
 
-  // A time with no offset is read as UTC for ordering purposes.
   const ms =
     Date.UTC(y, mo - 1, d, h, mi, s) +
     (raw.includes(".") ? fractionMs(raw) : 0) -
     offsetMinutes * 60_000;
 
-  return { raw, hasTime, hasOffset: offset !== undefined, valid, ms };
+  return { raw, hasTime, valid, ms };
 }
 
 function fractionMs(raw: string): number {

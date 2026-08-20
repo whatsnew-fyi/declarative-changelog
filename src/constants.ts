@@ -21,6 +21,26 @@ export const PLATFORM_TAGS = [
 
 export const ALL_TAGS = [...LIFECYCLE_TAGS, ...PLATFORM_TAGS] as const;
 
+/**
+ * The tag *grammar* is open even though the vocabulary is closed: a token that
+ * matches this is an unknown-tag error, a run containing one that does not is
+ * not a tag run at all (the heading then fails as a whole).
+ */
+export const TAG_GRAMMAR_RE = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * Pre-release identifiers that are really channels wearing a pre-release's
+ * syntax (`338.13-Stable`); a validator warns on these.
+ */
+export const CHANNEL_LIKE_PRERELEASE = [
+  "stable",
+  "release",
+  "final",
+  "ga",
+  "lts",
+  "hotfix",
+] as const;
+
 export type LifecycleTag = (typeof LIFECYCLE_TAGS)[number];
 export type PlatformTag = (typeof PLATFORM_TAGS)[number];
 export type Tag = (typeof ALL_TAGS)[number];
@@ -54,11 +74,29 @@ export const ESCAPE_HATCH_KEYS = [
   "date",
 ] as const;
 
-/** Known frontmatter keys. The spec does not declare this set closed, so unknowns only warn. */
+/**
+ * Frontmatter keys. `product.` and `document.` are closed sets (unknowns are
+ * errors); unknown *top-level* keys only warn, because changelogs get hosted
+ * through static-site generators whose frontmatter is not this format's to
+ * police. Keys beginning `x-` are permitted anywhere and never validated.
+ */
 export const FRONTMATTER_KEYS = {
   top: ["changelog", "product", "document"],
-  product: ["name", "vendor", "homepage", "id", "description", "platforms", "category", "color"],
+  product: [
+    "name",
+    "vendor",
+    "homepage",
+    "id",
+    "description",
+    "platforms",
+    "versioning",
+    "category",
+    "color",
+  ],
   document: ["updated", "coverage", "canonical", "locale", "older"],
 } as const;
 
 export const COVERAGE_VALUES = ["complete", "partial"] as const;
+
+export const VERSIONING_VALUES = ["semver", "calver", "none"] as const;
+export type Versioning = (typeof VERSIONING_VALUES)[number];

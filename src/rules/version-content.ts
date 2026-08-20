@@ -5,10 +5,13 @@ import { bumpKind, compareVersions } from "../parse/version.js";
 /**
  * Version and content should agree (spec §Version and content should agree):
  * a Breaking item wants at least a major bump, Added items at least a minor.
- * Only ever flags the disagreement — a consumer must never derive a version.
+ * Gated on `product.versioning: semver` — shape cannot carry the scheme, and
+ * a validator must never guess one. Only ever flags the disagreement — a
+ * consumer must never derive a version.
  */
 export function checkVersionContent(model: ChangelogModel): Diagnostic[] {
   const out: Diagnostic[] = [];
+  if (model.frontmatter.product.versioning !== "semver") return out;
 
   for (const [index, entry] of model.entries.entries()) {
     const version = entry.version;

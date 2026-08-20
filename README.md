@@ -9,7 +9,7 @@ The spec is provisional; this tool tracks it. Every closed vocabulary (tags, cat
 ```console
 $ npx declarative-changelog validate CHANGELOG.md
 CHANGELOG.md
-  Level 2 — Categorized · 24 entries
+  Level 2 — Categorized · 24 entries · addressable
   no problems
 ✔ no problems
 
@@ -19,7 +19,7 @@ $ npx declarative-changelog parse CHANGELOG.md
 
 ### `validate <file...|->`
 
-Lints one or more documents against the spec and reports the computed conformance level — **Level 1 (Structured)**: valid frontmatter, every release heading matches the grammar; **Level 2 (Categorized)**: Level 1 plus every entry's changes under the six recognized `###` sections.
+Lints one or more documents against the spec and reports the computed conformance level — **Level 1 (Structured)**: the frontmatter parses under the YAML profile and declares a `changelog` version whose major this checker understands, every release-heading candidate parses, identifiers are unique, entries are newest first, and no entry's body is only a pointer elsewhere; **Level 2 (Categorized)**: Level 1 plus, in every entry, no top-level list outside a recognized `###` section. Addressability — whether every entry has its own URL — is reported alongside the level, along with the count of skipped headings.
 
 | Flag | Effect |
 | :-- | :-- |
@@ -33,7 +33,7 @@ Exit codes: `0` valid · `1` validation failed · `2` usage or internal error. W
 
 ### `parse <file|->`
 
-Emits the consumer view — the spec's Field Mapping table as JSON: derived entry ids, version/title/date, resolved URLs (heading link → `url:` → `document.canonical` + anchor → `product.homepage`), the first-blockquote summary, categorized changes with the reference-tail reduction applied, effective platforms, `yanked`/`routine`/`prerelease` flags, `covers` and `superseded-by`. Absent beats guessed: what the publisher didn't state is omitted, never inferred.
+Emits the consumer view — the spec's Field Mapping table as JSON: derived entry ids, version/title/date (the escape hatch wins over the heading), resolved URLs (`url:` → heading link → `document.canonical` → `product.homepage`, never a fabricated fragment), the summary blockquote, categorized changes with the reference-tail reduction applied — flattened text plus detached structured references (`issue` / `cve` / `link` / `credit`, with URLs where linked) and covered-version attributions — effective platforms, `yanked`/`routine`/`prerelease` flags, `covers` and `superseded-by`, and the skipped-heading counts. Absent beats guessed: what the publisher didn't state is omitted, never inferred.
 
 Also available as a library:
 
@@ -45,18 +45,20 @@ import { parseChangelog, validateChangelog } from "declarative-changelog";
 
 Severity follows the spec's own language: MUST → error, SHOULD → warning, recommended → info.
 
-**Errors** — `frontmatter/missing`, `frontmatter/changelog-required`, `frontmatter/invalid-yaml`, `frontmatter/type`, `frontmatter/format`, `frontmatter/invalid-color`, `frontmatter/invalid-coverage`, `frontmatter/invalid-timestamp`, `frontmatter/invalid-locale`, `frontmatter/unknown-platform`, `frontmatter/older-required`, `heading/unknown-tag` (the tag vocabulary is closed — a channel belongs in the escape hatch), `heading/invalid-date`, `order/not-newest-first`, `identity/duplicate-id`, `hatch/unknown-key`, `hatch/invalid-yaml`, `hatch/misplaced`, `hatch/duplicate`, `hatch/invalid-version`, `hatch/invalid-date`, `hatch/prerelease-with-version` (a version's semver pre-release suffix is the signal; the flag is only for versionless releases), `relation/superseded-by-unresolved`, `entry/link-only-body` (the content must be the notes, not a pointer to them), `entry/section-content` (a category section contains a list and nothing else), `entry/empty-item`, `media/image-only-item`.
+**Errors** — `frontmatter/missing`, `frontmatter/changelog-required`, `frontmatter/invalid-yaml`, `frontmatter/profile` (anchors, aliases, tags, directives and multi-document streams are outside the YAML profile), `frontmatter/type`, `frontmatter/format`, `frontmatter/invalid-color`, `frontmatter/invalid-coverage`, `frontmatter/invalid-versioning`, `frontmatter/invalid-timestamp`, `frontmatter/invalid-locale`, `frontmatter/unknown-platform`, `frontmatter/unknown-key` (the `product.` and `document.` key sets are closed), `frontmatter/older-required`, `frontmatter/id-required` (a name the slug algorithm reduces to nothing makes `product.id` required), `frontmatter/unsupported-version` (unknown major; a newer minor only warns), `heading/unknown-tag` (the vocabulary is closed — a channel belongs in the escape hatch; consumers drop the token and keep the release), `heading/candidate-does-not-parse` (a date-bearing `##` heading that fails the grammar, with the near-miss diagnosed where possible), `heading/invalid-date`, `order/not-newest-first`, `identity/duplicate-id`, `hatch/unknown-key`, `hatch/invalid-yaml`, `hatch/profile`, `hatch/misplaced`, `hatch/duplicate`, `hatch/invalid-version`, `hatch/invalid-date`, `hatch/prerelease-with-version` (an error whatever its value — the semver pre-release suffix is the signal), `relation/superseded-by-unresolved` (dangling in-document), `entry/link-only-body` (the content must be the notes, not a pointer to them), `entry/section-content` (a category section contains a list and nothing else), `entry/duplicate-section` (consumers merge in document order), `entry/routine-with-changes` (a release with categorized changes is not routine), `entry/attribution-not-covered` (a bold-version attribution must name a version from `covers`), `entry/empty-item`, `media/image-only-item`.
 
-**Warnings** — `frontmatter/unknown-key`, `frontmatter/unsupported-version`, `heading/duplicate-tag`, `heading/skipped-release-like` (a `##` heading that looks like a release but doesn't parse — e.g. `## Release notes for 2026-05-02`), `document/multiple-titles`, `document/title-missing`, `entry/empty-section`, `entry/duplicate-section`, `entry/section-order` (canonical order is Added · Changed · Deprecated · Removed · Fixed · Security), `entry/summary-paragraphs`, `relation/yanked-without-superseded-by`, `relation/superseded-by-noise`, `relation/archive-unreachable`, `media/image-alt`, `media/raw-html`, `semver/breaking-needs-major`, `semver/added-needs-minor` (version/content agreement — only ever flagged, never derived; 0.x and pre-release finalizations are skipped).
+**Warnings** — `frontmatter/unknown-key` (top level only — static-site generator frontmatter is not this format's to police), `frontmatter/unsupported-version` (newer minor of major 0), `frontmatter/id-shape` (an explicit id should match `[a-z0-9][a-z0-9-]*`), `heading/duplicate-tag`, `heading/channel-as-prerelease` (`338.13-Stable` is, per the grammar, a pre-release named `Stable`), `document/multiple-titles`, `document/title-missing`, `entry/empty-section`, `entry/section-order` (canonical order is Added · Changed · Deprecated · Removed · Fixed · Security), `entry/summary-paragraphs`, `entry/breaking-near-miss` (`**BREAKING**`, `**Breaking:**`, `**Breaking change**` — the marker is exact), `hatch/contradicts-heading` (the hatch wins, but contradicting a heading that parses cleanly is a diverging document), `relation/yanked-without-superseded-by`, `relation/superseded-by-noise`, `relation/superseded-by-archive-only`, `relation/archive-unreachable`, `media/image-alt`, `media/raw-html`, `semver/breaking-needs-major`, `semver/added-needs-minor` (version/content agreement — gated on `product.versioning: semver`, only ever flagged, never derived; 0.x and pre-release finalizations are skipped).
 
-**Info** — `heading/date-only`, `heading/offset-missing`, `heading/skipped` (suppressed for `## Unreleased`), `conformance/uncategorized-sections`, `document/no-entries`.
+**Info** — `heading/date-only`, `heading/skipped` (dateless headings are not candidates; suppressed for `## Unreleased`), `conformance/uncategorized-sections`, `document/no-entries`.
+
+Keys beginning `x-` are permitted wherever keys appear and never validated. `relation/superseded-by-unresolved` downgrades to a warning when `document.older` exists but was not followed; `--follow-older` restores the strict check.
 
 ## Notes on interpretation
 
 The spec is a draft; where it leaves room, this tool takes these positions:
 
-- **`superseded-by` must name an entry** — a version that is only listed in another entry's `covers` does not resolve (the error says so specifically). With `document.older` present and unfollowed, the unresolved case downgrades to a warning; `--follow-older` restores the strict check.
-- **`prerelease:` alongside a version is rejected outright**, as the spec's open question 2 suggests validators should.
+- **Unpadded dates are treated as candidates.** The spec's candidate test is the `\d{4}-\d{2}-\d{2}` substring, but its own error examples include `## 2026-7-9` — the validator widens the test so the near-miss is diagnosed rather than silently skipped.
+- **A trailing prose credit stays in the prose.** A bare `@handle` at the end of a sentence (`Reported by @finch.`) is not detached; a credit is tail when thanks-prefixed or comma-joined.
 - **Link-only bodies** are flagged when an entry has no sections, no summary, and its whole body is one link or bare URL.
 - **Version grammar is the spec's, not semver's** — `338.13` and `1.2.3.4` are versions; `1.0rc1` (PEP 440) is a title.
 - **A date-only value means midnight UTC**, for ordering and for identity.

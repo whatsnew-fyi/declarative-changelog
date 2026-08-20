@@ -1,8 +1,22 @@
-import { parseDocument } from "yaml";
-import { COVERAGE_VALUES, FRONTMATTER_KEYS, PLATFORM_TAGS, SPEC_VERSION } from "../constants.js";
+import {
+  COVERAGE_VALUES,
+  FRONTMATTER_KEYS,
+  PLATFORM_TAGS,
+  SPEC_VERSION,
+  VERSIONING_VALUES,
+  type Versioning,
+} from "../constants.js";
 import type { Diagnostic, LineIndex } from "../diagnostics.js";
 import { parseIsoDate } from "./date.js";
-import { asString, asStringList, asUrl, eachPair, isMap, YamlContext } from "./yaml-utils.js";
+import {
+  asString,
+  asStringList,
+  asUrl,
+  eachPair,
+  isMap,
+  parseProfiled,
+  YamlContext,
+} from "./yaml-utils.js";
 
 export interface Frontmatter {
   changelog?: string;
@@ -13,6 +27,7 @@ export interface Frontmatter {
     id?: string;
     description?: string;
     platforms?: string[];
+    versioning?: Versioning;
     category?: string;
     color?: string;
   };
@@ -28,6 +43,22 @@ export interface Frontmatter {
 }
 
 const COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+const EXPLICIT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * The one fixed default-id algorithm: lowercase, Unicode NFKD with combining
+ * marks dropped, every run outside a-z0-9 becomes one `-`, trimmed. Returns
+ * undefined when the name reduces to nothing (an all-CJK name, say).
+ */
+export function slugProductName(name: string): string | undefined {
+  const s = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s === "" ? undefined : s;
+}
 
 export function parseFrontmatter(
   yamlText: string,
@@ -37,10 +68,10 @@ export function parseFrontmatter(
 ): Frontmatter {
   const fm: Frontmatter = { product: {}, document: {}, valid: true };
   const ctx = new YamlContext(baseOffset, lines, diagnostics, "frontmatter");
-  const doc = parseDocument(yamlText);
+  const doc = parseProfiled(ctx, yamlText);
 
-  if (ctx.yamlErrors(doc, "invalid-yaml") || !isMap(doc.contents)) {
-    if (!isMap(doc.contents) && doc.errors.length === 0) {
+  if (doc === undefined || ctx.yamlErrors(doc, "invalid-yaml") || !isMap(doc.contents)) {
+    if (doc !== undefined && !isMap(doc.contents) && doc.errors.length === 0) {
       ctx.report("invalid-yaml", "error", "Frontmatter must be a YAML map");
     }
     fm.valid = false;
@@ -53,11 +84,19 @@ export function parseFrontmatter(
         const value = asString(ctx, pair, "changelog");
         if (value !== undefined) {
           fm.changelog = value;
-          if (value !== SPEC_VERSION) {
+          const major = /^(\d+)\.\d+$/.exec(value)?.[1];
+          if (major !== SPEC_VERSION.split(".")[0]) {
+            ctx.report(
+              "unsupported-version",
+              "error",
+              `Unsupported format version \`${value}\` — this validator understands major version ${SPEC_VERSION.split(".")[0]}`,
+              pair.value,
+            );
+          } else if (value !== SPEC_VERSION) {
             ctx.report(
               "unsupported-version",
               "warning",
-              `Unsupported format version \`${value}\` — validating as ${SPEC_VERSION}`,
+              `Format version \`${value}\` is newer than this validator knows (${SPEC_VERSION}) — vocabulary it added will read as typos`,
               pair.value,
             );
           }
@@ -69,7 +108,7 @@ export function parseFrontmatter(
           ctx.report("type", "error", "`product` must be a map", pair.value ?? pair.key);
           break;
         }
-        eachPair(ctx, pair.value, FRONTMATTER_KEYS.product, "product", "warning", (k, p) => {
+        eachPair(ctx, pair.value, FRONTMATTER_KEYS.product, "product", "error", (k, p) => {
           switch (k) {
             case "homepage":
               fm.product.homepage = asUrl(ctx, p, "product.homepage");
@@ -88,6 +127,37 @@ export function parseFrontmatter(
                   }
                 }
                 fm.product.platforms = platforms;
+              }
+              break;
+            }
+            case "versioning": {
+              const value = asString(ctx, p, "product.versioning");
+              if (value !== undefined) {
+                if (!(VERSIONING_VALUES as readonly string[]).includes(value)) {
+                  ctx.report(
+                    "invalid-versioning",
+                    "error",
+                    `\`product.versioning\` must be one of ${VERSIONING_VALUES.join(", ")}, got \`${value}\` — a validator must never guess a scheme`,
+                    p.value,
+                  );
+                } else {
+                  fm.product.versioning = value as Versioning;
+                }
+              }
+              break;
+            }
+            case "id": {
+              const value = asString(ctx, p, "product.id");
+              if (value !== undefined) {
+                if (!EXPLICIT_ID_RE.test(value)) {
+                  ctx.report(
+                    "id-shape",
+                    "warning",
+                    `\`product.id\` should match \`[a-z0-9][a-z0-9-]*\`, got \`${value}\``,
+                    p.value,
+                  );
+                }
+                fm.product.id = value;
               }
               break;
             }
@@ -110,7 +180,7 @@ export function parseFrontmatter(
             default: {
               const value = asString(ctx, p, `product.${k}`);
               if (value !== undefined) {
-                fm.product[k as "name" | "vendor" | "id" | "description" | "category"] = value;
+                fm.product[k as "name" | "vendor" | "description" | "category"] = value;
               }
             }
           }
@@ -121,7 +191,7 @@ export function parseFrontmatter(
           ctx.report("type", "error", "`document` must be a map", pair.value ?? pair.key);
           break;
         }
-        eachPair(ctx, pair.value, FRONTMATTER_KEYS.document, "document", "warning", (k, p) => {
+        eachPair(ctx, pair.value, FRONTMATTER_KEYS.document, "document", "error", (k, p) => {
           switch (k) {
             case "updated": {
               const value = asString(ctx, p, "document.updated");
@@ -131,7 +201,7 @@ export function parseFrontmatter(
                   ctx.report(
                     "invalid-timestamp",
                     "error",
-                    `\`document.updated\` is not an ISO 8601 timestamp: \`${value}\``,
+                    `\`document.updated\` is not an RFC 3339 timestamp: \`${value}\``,
                     p.value,
                   );
                 } else {
@@ -197,6 +267,17 @@ export function parseFrontmatter(
       "older-required",
       "error",
       "`document.older` is required when `document.coverage` is `partial`",
+    );
+  }
+  if (
+    fm.product.name !== undefined &&
+    fm.product.id === undefined &&
+    slugProductName(fm.product.name) === undefined
+  ) {
+    ctx.report(
+      "id-required",
+      "error",
+      `\`product.name\` \`${fm.product.name}\` reduces to nothing under the id algorithm — an explicit \`product.id\` is required`,
     );
   }
 

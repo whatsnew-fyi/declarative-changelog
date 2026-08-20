@@ -1,4 +1,10 @@
-import { documentLevel, entryLevel, LEVEL_NAMES, type Level } from "./conformance.js";
+import {
+  addressableEntryCount,
+  documentLevel,
+  entryLevel,
+  LEVEL_NAMES,
+  type Level,
+} from "./conformance.js";
 import { type ConsumerView, toConsumerView } from "./consumer-view.js";
 import { countBySeverity, type Diagnostic } from "./diagnostics.js";
 import { buildModel, type ChangelogModel } from "./parse/document.js";
@@ -9,7 +15,7 @@ export { LEVEL_NAMES } from "./conformance.js";
 export type { ConsumerChange, ConsumerEntry, ConsumerView } from "./consumer-view.js";
 export type { Diagnostic, Position, Severity } from "./diagnostics.js";
 export type { ChangeItem, ChangelogModel, ReleaseEntry, Section } from "./parse/document.js";
-export { reduceChangeItem } from "./parse/reduction.js";
+export { type ChangeReference, reduceChangeItem } from "./parse/reduction.js";
 export { compareVersions, parseVersion } from "./parse/version.js";
 
 export interface ValidateOptions {
@@ -24,6 +30,10 @@ export interface ValidationResult {
   level: Level;
   levelName: string;
   entryCount: number;
+  /** Headings skipped, counted — candidates are the ones that read like releases. */
+  skipped: { headings: number; candidates: number };
+  /** Entries with their own URL (heading link or hatch `url:`) — addressability is a property, not a level. */
+  addressableEntries: number;
   model: ChangelogModel;
 }
 
@@ -61,6 +71,11 @@ export function validateChangelog(
     level,
     levelName: LEVEL_NAMES[level],
     entryCount: model.entries.length,
+    skipped: {
+      headings: model.skipped.length,
+      candidates: model.skipped.filter((s) => s.candidate).length,
+    },
+    addressableEntries: addressableEntryCount(model),
     model,
   };
 }
@@ -76,8 +91,15 @@ export async function loadArchiveChain(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ArchiveIdentifiers> {
   const archive: ArchiveIdentifiers = { versions: new Set(), ids: new Set(), failures: [] };
+  const seen = new Set<string>();
   let url: string | undefined = firstUrl;
   for (let depth = 0; url !== undefined && depth < maxDepth; depth++) {
+    // Consumers walking `document.older` MUST detect cycles.
+    if (seen.has(url)) {
+      archive.failures.push(`${url}: the \`document.older\` chain loops back on itself`);
+      break;
+    }
+    seen.add(url);
     let body: string;
     try {
       const response = await fetchImpl(url);

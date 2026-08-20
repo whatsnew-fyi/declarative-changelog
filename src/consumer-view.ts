@@ -1,5 +1,6 @@
 import { entryLevel, type Level } from "./conformance.js";
 import type { ChangelogModel, ReleaseEntry } from "./parse/document.js";
+import type { ChangeReference } from "./parse/reduction.js";
 
 /**
  * The consumer view: what the spec's Field Mapping table says a consumer gets,
@@ -10,6 +11,10 @@ export interface ConsumerChange {
   category: string;
   text: string;
   breaking: boolean;
+  /** Detached reference-tail tokens — detached, not discarded. */
+  references: ChangeReference[];
+  /** The covered version this item is attributed to, `v` stripped. */
+  attributedTo?: string;
   markdown: string;
 }
 
@@ -37,6 +42,11 @@ export interface ConsumerView {
   product: ChangelogModel["frontmatter"]["product"] & { id?: string };
   document: ChangelogModel["frontmatter"]["document"];
   entries: ConsumerEntry[];
+  /**
+   * Headings a consumer skips, counted — "three releases" and "three
+   * releases, four candidates skipped" are different statements.
+   */
+  skipped: { headings: number; candidates: number };
 }
 
 export function toConsumerView(model: ChangelogModel): ConsumerView {
@@ -47,6 +57,10 @@ export function toConsumerView(model: ChangelogModel): ConsumerView {
     product,
     document: { ...model.frontmatter.document },
     entries: model.entries.map((entry) => toConsumerEntry(entry, model)),
+    skipped: {
+      headings: model.skipped.length,
+      candidates: model.skipped.filter((s) => s.candidate).length,
+    },
   };
   if (model.frontmatter.changelog !== undefined) view.changelog = model.frontmatter.changelog;
   return view;
@@ -59,12 +73,19 @@ function toConsumerEntry(entry: ReleaseEntry, model: ChangelogModel): ConsumerEn
     changes: entry.sections
       .filter((s) => s.category)
       .flatMap((s) =>
-        s.items.map((item) => ({
-          category: item.category,
-          text: item.text,
-          breaking: item.breaking,
-          markdown: item.markdown,
-        })),
+        s.items.map((item) => {
+          const change: ConsumerChange = {
+            category: item.category,
+            text: item.text,
+            breaking: item.breaking,
+            references: item.references,
+            markdown: item.markdown,
+          };
+          if (item.attribution !== undefined) {
+            change.attributedTo = item.attribution.replace(/^v/, "");
+          }
+          return change;
+        }),
       ),
     prerelease: entry.prerelease,
     yanked: entry.yanked,
@@ -72,13 +93,13 @@ function toConsumerEntry(entry: ReleaseEntry, model: ChangelogModel): ConsumerEn
     level: entryLevel(entry),
   };
 
-  if (entry.version) out.version = entry.version.raw;
+  if (entry.version) out.version = entry.version.raw.replace(/^v/, "");
   if (entry.title !== undefined) out.title = entry.title;
 
-  // url: heading link, else `url:`, else canonical + anchor, else canonical, else homepage.
-  const canonical = model.frontmatter.document.canonical;
+  // url: `url:`, else the heading link, else canonical, else homepage — never
+  // a fabricated fragment.
   const url =
-    entry.url ?? (canonical ? `${canonical}#${entry.anchor}` : model.frontmatter.product.homepage);
+    entry.url ?? model.frontmatter.document.canonical ?? model.frontmatter.product.homepage;
   if (url !== undefined) out.url = url;
 
   if (entry.summary?.text) out.summary = entry.summary.text;

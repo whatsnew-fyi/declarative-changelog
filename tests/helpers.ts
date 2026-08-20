@@ -4,6 +4,7 @@ export const FRONTMATTER = `---
 changelog: "0.1"
 product:
   name: Kestrel
+  versioning: semver
 document:
   canonical: https://kestrel.example/changelog
 ---`;

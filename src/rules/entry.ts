@@ -44,12 +44,24 @@ function checkSections(entry: ReleaseEntry, out: Diagnostic[]): void {
     if (seen.has(section.category!)) {
       out.push({
         rule: "entry/duplicate-section",
-        severity: "warning",
-        message: `\`### ${section.category}\` appears more than once in this entry`,
+        severity: "error",
+        message: `\`### ${section.category}\` appears more than once in this entry — a consumer that meets it anyway merges the lists in document order`,
         position: section.position,
       });
     }
     seen.add(section.category!);
+  }
+
+  // A release with categorized changes is not routine, whichever of the two
+  // claims was the mistake.
+  if (entry.routine && recognized.length > 0) {
+    out.push({
+      rule: "entry/routine-with-changes",
+      severity: "error",
+      message:
+        "Change sections in an entry tagged `routine` — a release with categorized changes is not routine",
+      position: entry.position,
+    });
   }
 
   const order = recognized.map((s) => CATEGORIES.indexOf(s.category!));
@@ -92,6 +104,7 @@ function checkSummary(entry: ReleaseEntry, out: Diagnostic[]): void {
 }
 
 function checkItems(entry: ReleaseEntry, out: Diagnostic[]): void {
+  const covered = new Set((entry.covers ?? []).map((v) => v.replace(/^v/, "")));
   for (const section of entry.sections) {
     for (const item of section.items) {
       if (item.text === "") {
@@ -101,6 +114,22 @@ function checkItems(entry: ReleaseEntry, out: Diagnostic[]): void {
           message: item.hasImage
             ? "This change item is only an image — images must not be load-bearing; an entry has to be comprehensible with every image removed"
             : "Empty change item",
+          position: item.position,
+        });
+      }
+      if (item.breakingNearMiss !== undefined) {
+        out.push({
+          rule: "entry/breaking-near-miss",
+          severity: "warning",
+          message: `\`**${item.breakingNearMiss}**\` reads like the Breaking marker but is not exact — the marker is the literal \`**Breaking**\` followed by a separator (\` — \`, \` – \` or \` - \`)`,
+          position: item.position,
+        });
+      }
+      if (item.attribution !== undefined && !covered.has(item.attribution.replace(/^v/, ""))) {
+        out.push({
+          rule: "entry/attribution-not-covered",
+          severity: "error",
+          message: `The item is attributed to \`${item.attribution}\`, which this entry does not list in \`covers\``,
           position: item.position,
         });
       }

@@ -1,4 +1,4 @@
-import { ALL_TAGS } from "../constants.js";
+import { ALL_TAGS, CHANNEL_LIKE_PRERELEASE } from "../constants.js";
 import type { Diagnostic } from "../diagnostics.js";
 import type { ChangelogModel } from "../parse/document.js";
 
@@ -11,7 +11,7 @@ export function checkHeadings(model: ChangelogModel): Diagnostic[] {
         out.push({
           rule: "heading/unknown-tag",
           severity: "error",
-          message: `Unknown tag \`${tag}\` — the vocabulary is closed: ${ALL_TAGS.join(", ")}. A channel belongs in the escape hatch (\`channel:\`)`,
+          message: `Unknown tag \`${tag}\` — the vocabulary is closed: ${ALL_TAGS.join(", ")}. A channel belongs in the escape hatch (\`channel:\`); a consumer drops the token and keeps the release`,
           position: entry.position,
         });
       }
@@ -44,30 +44,41 @@ export function checkHeadings(model: ChangelogModel): Diagnostic[] {
           "Date-only value — it means midnight UTC and is a lossy sort key; a time and offset are recommended",
         position: entry.position,
       });
-    } else if (!entry.date.hasOffset) {
+    }
+
+    // A channel wearing a pre-release's syntax: `338.13-Stable` is, per the
+    // grammar, a pre-release named `Stable`.
+    const firstIdent = entry.version?.prerelease?.split(".")[0]?.toLowerCase();
+    if (
+      firstIdent !== undefined &&
+      (CHANNEL_LIKE_PRERELEASE as readonly string[]).includes(firstIdent)
+    ) {
       out.push({
-        rule: "heading/offset-missing",
-        severity: "info",
-        message: "Time without a UTC offset — consumers will read it as UTC",
+        rule: "heading/channel-as-prerelease",
+        severity: "warning",
+        message: `The pre-release part of \`${entry.version!.raw}\` starts with \`${firstIdent}\`, which reads like a channel — a channel belongs in the escape hatch (\`channel:\`)`,
         position: entry.position,
       });
     }
   }
 
   for (const skipped of model.skipped) {
-    if (skipped.text.trim().toLowerCase() === "unreleased") continue; // blessed by the spec
-    if (skipped.smellsLikeRelease) {
+    if (skipped.candidate) {
+      // A heading with a date in it was almost certainly meant to be a
+      // release; skipping it silently would delete a release from every
+      // aggregator with no one the wiser.
+      const diagnosis = skipped.nearMiss ? ` — ${skipped.nearMiss}` : "";
       out.push({
-        rule: "heading/skipped-release-like",
-        severity: "warning",
-        message: `\`## ${skipped.text}\` does not match the release-heading grammar and will be skipped by consumers — it looks like it was meant to be a release heading`,
+        rule: "heading/candidate-does-not-parse",
+        severity: "error",
+        message: `\`## ${skipped.text}\` contains a date but does not parse under the release-heading grammar${diagnosis}; consumers skip it`,
         position: skipped.position,
       });
-    } else {
+    } else if (skipped.text.trim().toLowerCase() !== "unreleased") {
       out.push({
         rule: "heading/skipped",
         severity: "info",
-        message: `\`## ${skipped.text}\` does not match the release-heading grammar; consumers skip it`,
+        message: `\`## ${skipped.text}\` contains no date, so it is not a release-heading candidate; consumers skip it`,
         position: skipped.position,
       });
     }

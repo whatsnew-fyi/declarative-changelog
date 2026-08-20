@@ -17,14 +17,50 @@ describe("frontmatter rules", () => {
     );
   });
 
-  it("requires changelog to be a string, not a YAML number", () => {
+  it("reads an unquoted changelog value as a string — the failsafe schema", () => {
     const result = validate(ENTRY, "---\nchangelog: 0.1\n---");
-    const error = result.diagnostics.find((d) => d.rule === "frontmatter/type");
-    expect(error?.message).toContain("quote the value");
+    expect(result.diagnostics.map((d) => d.rule)).not.toContain("frontmatter/type");
+    expect(result.model.frontmatter.changelog).toBe("0.1");
   });
 
-  it("warns on an unsupported format version", () => {
-    expect(rules(ENTRY, '---\nchangelog: "0.2"\n---')).toContain("frontmatter/unsupported-version");
+  it("warns on a newer minor and errors on an unknown major", () => {
+    const minor = validate(ENTRY, '---\nchangelog: "0.2"\n---');
+    expect(
+      minor.diagnostics.find((d) => d.rule === "frontmatter/unsupported-version")?.severity,
+    ).toBe("warning");
+    const major = validate(ENTRY, '---\nchangelog: "1.0"\n---');
+    expect(
+      major.diagnostics.find((d) => d.rule === "frontmatter/unsupported-version")?.severity,
+    ).toBe("error");
+    expect(major.level).toBe(0);
+  });
+
+  it("rejects YAML outside the profile: anchors, aliases, tags", () => {
+    const ids = rules(
+      ENTRY,
+      '---\nchangelog: "0.1"\nproduct:\n  name: &n Kestrel\n  vendor: *n\n---',
+    );
+    expect(ids).toContain("frontmatter/profile");
+  });
+
+  it("keeps list values verbatim — covers: [1.10] is the string 1.10, not the float 1.1", () => {
+    const view = parse("## 2.4.0 — 2026-07-09\n\n```changelog\ncovers: [1.10]\n```\n\nBody.");
+    expect(view.entries[0]!.covers).toEqual(["1.10"]);
+  });
+
+  it("never validates x- keys — the experimentation escape valve", () => {
+    const ids = rules(
+      "## 2.4.0 — 2026-07-09\n\n```changelog\nx-build: nightly-7\n```\n\nBody.",
+      '---\nchangelog: "0.1"\nproduct:\n  name: Kestrel\n  x-tier: gold\n---',
+    );
+    expect(ids).not.toContain("hatch/unknown-key");
+    expect(ids).not.toContain("frontmatter/unknown-key");
+  });
+
+  it("validates product.versioning against its three values", () => {
+    expect(rules(ENTRY, '---\nchangelog: "0.1"\nproduct:\n  versioning: dates\n---')).toContain(
+      "frontmatter/invalid-versioning",
+    );
   });
 
   it("requires document.older when coverage is partial", () => {
@@ -121,6 +157,22 @@ describe("escape hatch rules", () => {
     );
     expect(view.entries[0]).toMatchObject({ version: "2.4.0", title: "Better title" });
   });
+
+  it("a hatch url overrides a heading link", () => {
+    const view = parse(
+      "## [2.4.0](https://x.example/wrong) — 2026-07-09\n\n```changelog\nurl: https://x.example/right\n```\n\nBody.",
+    );
+    expect(view.entries[0]!.url).toBe("https://x.example/right");
+  });
+
+  it("warns when the hatch contradicts a heading that parses cleanly", () => {
+    const result = validate(
+      '## 2.4.0 — 2026-07-09\n\n```changelog\nversion: "2.5.0"\n```\n\nBody.',
+    );
+    expect(result.diagnostics.find((d) => d.rule === "hatch/contradicts-heading")?.severity).toBe(
+      "warning",
+    );
+  });
 });
 
 describe("superseded-by and yanked", () => {
@@ -146,13 +198,18 @@ describe("superseded-by and yanked", () => {
     expect(d?.severity).toBe("warning");
   });
 
-  it("points out a target that is only a covered version", () => {
-    const result = validate(
+  it("resolves against a covered version — resolution lands on the covering entry", () => {
+    const ids = rules(
       '## 2.4.0 — 2026-07-09 (yanked)\n\n```changelog\nsuperseded-by: "2.3.1"\n```\n\nBad.\n\n## 2.3.0 — 2026-06-01\n\n```changelog\ncovers: ["2.3.1"]\n```\n\nGood.',
     );
-    const d = result.diagnostics.find((d) => d.rule === "relation/superseded-by-unresolved");
-    expect(d?.severity).toBe("error");
-    expect(d?.message).toContain("covered");
+    expect(ids).not.toContain("relation/superseded-by-unresolved");
+  });
+
+  it("treats v-prefixed and bare versions as the same superseded-by target", () => {
+    const ids = rules(
+      '## v2.1.3 — 2026-03-30 (yanked)\n\n```changelog\nsuperseded-by: "2.1.2"\n```\n\nBad.\n\n## v2.1.2 — 2026-03-01\n\nGood.',
+    );
+    expect(ids).not.toContain("relation/superseded-by-unresolved");
   });
 
   it("warns when a yanked entry gives no destination", () => {
@@ -191,12 +248,55 @@ describe("entry body rules", () => {
     );
   });
 
-  it("warns on duplicate and out-of-order sections", () => {
-    const ids = rules(
+  it("rejects a duplicated category section and warns on out-of-order sections", () => {
+    const result = validate(
       "## 2.4.0 — 2026-07-09\n\n### Fixed\n\n- A fix.\n\n### Added\n\n- A thing.\n\n### Fixed\n\n- Another.",
     );
+    const ids = result.diagnostics.map((d) => d.rule);
     expect(ids).toContain("entry/section-order");
-    expect(ids).toContain("entry/duplicate-section");
+    expect(result.diagnostics.find((d) => d.rule === "entry/duplicate-section")?.severity).toBe(
+      "error",
+    );
+  });
+
+  it("rejects change sections in a routine entry", () => {
+    expect(rules("## 2.4.1 — 2026-07-14 (routine)\n\n### Fixed\n\n- A fix.")).toContain(
+      "entry/routine-with-changes",
+    );
+    expect(rules("## 2.4.1 — 2026-07-14 (routine)\n\nNo user-facing changes.")).not.toContain(
+      "entry/routine-with-changes",
+    );
+  });
+
+  it("warns on Breaking near-misses without treating them as the marker", () => {
+    const result = validate(
+      "## 3.0.0 — 2026-07-09\n\n### Removed\n\n- **BREAKING** — the flag is gone.\n\n## 2.0.0 — 2026-06-01\n\nBody.",
+    );
+    expect(result.diagnostics.map((d) => d.rule)).toContain("entry/breaking-near-miss");
+    const view = parse(
+      "## 3.0.0 — 2026-07-09\n\n### Removed\n\n- **BREAKING** — the flag is gone.",
+    );
+    expect(view.entries[0]!.changes[0]!.breaking).toBe(false);
+  });
+
+  it("rejects an attribution to a version the entry does not cover", () => {
+    expect(
+      rules(
+        '## 2.3.0 — 2026-06-11\n\n```changelog\ncovers: ["2.3.1"]\n```\n\n### Fixed\n\n- **2.3.2** — a stray fix.',
+      ),
+    ).toContain("entry/attribution-not-covered");
+    expect(
+      rules(
+        '## 2.3.0 — 2026-06-11\n\n```changelog\ncovers: ["2.3.1"]\n```\n\n### Fixed\n\n- **2.3.1** — the right fix.',
+      ),
+    ).not.toContain("entry/attribution-not-covered");
+  });
+
+  it("the summary is the blockquote directly after the heading — position, not order", () => {
+    const late = parse("## 2.4.0 — 2026-07-09\n\nProse first.\n\n> Not a summary.");
+    expect(late.entries[0]!.summary).toBeUndefined();
+    const alert = parse("## 2.4.0 — 2026-07-09\n\n> [!NOTE]\n> Alert callouts are body.");
+    expect(alert.entries[0]!.summary).toBeUndefined();
   });
 
   it("recognizes categories case-insensitively", () => {

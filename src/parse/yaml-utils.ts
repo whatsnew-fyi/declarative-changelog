@@ -1,4 +1,14 @@
-import { type Document, isMap, isScalar, isSeq, type Pair, type Node as YamlNode } from "yaml";
+import {
+  type Document,
+  isAlias,
+  isMap,
+  isScalar,
+  isSeq,
+  type Pair,
+  parseAllDocuments,
+  visit,
+  type Node as YamlNode,
+} from "yaml";
 import type { Diagnostic, LineIndex, Position, Severity } from "../diagnostics.js";
 
 /** Bridges yaml's character ranges (relative to the YAML text) to file positions. */
@@ -39,26 +49,62 @@ export class YamlContext {
   }
 }
 
+/**
+ * Parses YAML under the spec's profile — the failsafe schema: maps, sequences
+ * and strings, nothing else, so `1.10` stays four characters and `2026-07-09`
+ * stays a string. Anchors, aliases, custom tags, directives and multi-document
+ * streams are rejected. Returns undefined when nothing usable was parsed.
+ */
+export function parseProfiled(ctx: YamlContext, yamlText: string): Document.Parsed | undefined {
+  const docs = parseAllDocuments(yamlText, { schema: "failsafe" });
+  const doc = docs[0];
+  if (doc === undefined) return undefined;
+  if (docs.length > 1) {
+    ctx.report(
+      "profile",
+      "error",
+      "Multi-document YAML streams must not appear",
+      docs[1]!.contents,
+    );
+  }
+  if (doc.directives.yaml.explicit) {
+    ctx.report("profile", "error", "YAML directives must not appear");
+  }
+  visit(doc, {
+    Node(_key, node) {
+      if (node.anchor !== undefined) {
+        ctx.report("profile", "error", `YAML anchors must not appear (\`&${node.anchor}\`)`, node);
+      }
+      if (node.tag !== undefined) {
+        ctx.report("profile", "error", `YAML tags must not appear (\`${node.tag}\`)`, node);
+      }
+    },
+    Alias(_key, node) {
+      ctx.report("profile", "error", `YAML aliases must not appear (\`*${node.source}\`)`, node);
+    },
+  });
+  return doc;
+}
+
 export function asString(ctx: YamlContext, pair: Pair, keyPath: string): string | undefined {
   const value = pair.value;
   if (isScalar(value) && typeof value.value === "string") return value.value;
-  if (isScalar(value) && (typeof value.value === "number" || typeof value.value === "boolean")) {
-    ctx.report(
-      "type",
-      "error",
-      `\`${keyPath}\` must be a string, got ${typeof value.value} \`${String(value.value)}\` — quote the value`,
-      value,
-    );
-    return undefined;
-  }
   ctx.report("type", "error", `\`${keyPath}\` must be a string`, value ?? pair.key);
   return undefined;
 }
 
+/** The profile types booleans as exactly the string `true` or `false`. */
 export function asBoolean(ctx: YamlContext, pair: Pair, keyPath: string): boolean | undefined {
   const value = pair.value;
-  if (isScalar(value) && typeof value.value === "boolean") return value.value;
-  ctx.report("type", "error", `\`${keyPath}\` must be a boolean`, value ?? pair.key);
+  if (isScalar(value) && (value.value === "true" || value.value === "false")) {
+    return value.value === "true";
+  }
+  ctx.report(
+    "type",
+    "error",
+    `\`${keyPath}\` must be exactly \`true\` or \`false\``,
+    value ?? pair.key,
+  );
   return undefined;
 }
 
@@ -70,8 +116,8 @@ export function asStringList(ctx: YamlContext, pair: Pair, keyPath: string): str
   }
   const out: string[] = [];
   for (const item of value.items) {
-    if (isScalar(item) && (typeof item.value === "string" || typeof item.value === "number")) {
-      out.push(String(item.value));
+    if (isScalar(item) && typeof item.value === "string") {
+      out.push(item.value);
     } else {
       ctx.report("type", "error", `\`${keyPath}\` entries must be strings`, item);
     }
@@ -101,6 +147,7 @@ export function eachPair(
   for (const pair of node.items) {
     const key = isScalar(pair.key) ? String(pair.key.value) : undefined;
     if (key === undefined) continue;
+    if (key.startsWith("x-")) continue; // the experimentation escape valve: never validated
     if (!knownKeys.includes(key)) {
       const where = keyPath ? `\`${keyPath}\`` : "the frontmatter";
       ctx.report(
@@ -116,4 +163,4 @@ export function eachPair(
 }
 
 export type { Pair, YamlNode };
-export { isMap, isScalar, isSeq };
+export { isAlias, isMap, isScalar, isSeq };

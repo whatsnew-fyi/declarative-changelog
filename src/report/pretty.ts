@@ -21,9 +21,23 @@ export function formatPretty(results: readonly ValidationResult[], quiet: boolea
 
     const shown = result.diagnostics.filter((d) => !quiet || d.severity === "error");
     lines.push(pc.underline(result.file));
-    lines.push(
-      `  ${pc.bold(result.levelName)} · ${result.entryCount} ${result.entryCount === 1 ? "entry" : "entries"}`,
-    );
+    const facts = [
+      pc.bold(result.levelName),
+      `${result.entryCount} ${result.entryCount === 1 ? "entry" : "entries"}`,
+    ];
+    if (result.entryCount > 0) {
+      facts.push(
+        result.addressableEntries === result.entryCount
+          ? "addressable"
+          : `${result.addressableEntries}/${result.entryCount} addressable`,
+      );
+    }
+    if (result.skipped.headings > 0) {
+      const candidates =
+        result.skipped.candidates > 0 ? ` (${result.skipped.candidates} candidates)` : "";
+      facts.push(`${result.skipped.headings} skipped${candidates}`);
+    }
+    lines.push(`  ${facts.join(" · ")}`);
     for (const d of shown) lines.push(formatDiagnostic(d));
     if (shown.length === 0) lines.push(pc.dim("  no problems"));
     lines.push("");

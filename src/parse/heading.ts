@@ -1,5 +1,5 @@
 import type { Heading, Link } from "mdast";
-import { SEPARATORS } from "../constants.js";
+import { SEPARATORS, TAG_GRAMMAR_RE } from "../constants.js";
 import { DATE_AT_END_RE, type HeadingDate, parseIsoDate } from "./date.js";
 import { flattenInline } from "./inline.js";
 import { parseVersion, type Version } from "./version.js";
@@ -24,7 +24,14 @@ export interface ParsedHeading {
 
 export type HeadingResult =
   | { kind: "release"; heading: ParsedHeading }
-  | { kind: "skipped"; text: string; smellsLikeRelease: boolean };
+  | {
+      kind: "skipped";
+      text: string;
+      /** Contains a full-date, so it was almost certainly meant to be a release. */
+      candidate: boolean;
+      /** A diagnosed near-miss — the character-level reason the parse failed. */
+      nearMiss?: string;
+    };
 
 export function parseReleaseHeading(node: Heading): HeadingResult {
   const children = node.children;
@@ -37,7 +44,7 @@ export function parseReleaseHeading(node: Heading): HeadingResult {
     const rest = flattenInline(children.slice(1));
     const text = `${label}${rest}`;
     const sep = SEPARATORS.find((s) => rest.startsWith(s));
-    if (sep !== undefined) {
+    if (sep !== undefined && label !== "") {
       const tail = parseDateAndTags(rest.slice(sep.length));
       if (tail && tail.prefix === "") {
         const heading: ParsedHeading = {
@@ -77,16 +84,20 @@ interface Tail {
 
 /** Matches `date tags?` anchored at the end; returns whatever precedes it. */
 function parseDateAndTags(text: string): Tail | undefined {
-  // Try the tag run first: ` (` tag (`, ` tag)* `)` at the very end. Commit to
-  // it only if a date immediately precedes it — otherwise the parens belong to
-  // a title and the heading must end in a bare date to parse.
+  // Try the tag run first: ` (` tag (`, ` tag)* `)` at the very end. It only
+  // is a tag run when every token matches the tag grammar — `(special build)`
+  // is not one, and its parens belong to a title. Commit to it only if a date
+  // immediately precedes it.
   const tagMatch = / \(([^()]*)\)$/.exec(text);
-  for (const candidate of tagMatch
-    ? [
-        { body: text.slice(0, tagMatch.index), tags: tagMatch[1]!.split(", ") },
-        { body: text, tags: [] },
-      ]
-    : [{ body: text, tags: [] }]) {
+  const tagTokens = tagMatch ? tagMatch[1]!.split(", ") : [];
+  const candidates =
+    tagMatch && tagTokens.every((t) => TAG_GRAMMAR_RE.test(t))
+      ? [
+          { body: text.slice(0, tagMatch.index), tags: tagTokens },
+          { body: text, tags: [] },
+        ]
+      : [{ body: text, tags: [] }];
+  for (const candidate of candidates) {
     const dateMatch = DATE_AT_END_RE.exec(candidate.body);
     if (!dateMatch) continue;
     const date = parseIsoDate(dateMatch[1]!);
@@ -111,8 +122,22 @@ function labelParts(label: string): { version?: Version; title?: string } {
   return { title: label };
 }
 
+const FULL_DATE_RE = /\d{4}-\d{2}-\d{2}/;
+const LOOSE_DATE_RE = /\d{4}-\d{1,2}-\d{1,2}/;
+
 function skipped(text: string): HeadingResult {
-  const smellsLikeRelease =
-    /\d{4}-\d{2}-\d{2}/.test(text) || /(^|\s)v?\d+(\.\d+)+(\s|$|[:)])/.test(text);
-  return { kind: "skipped", text, smellsLikeRelease };
+  // The spec's candidate test is the full-date substring. The validator also
+  // treats an unpadded date as a candidate so the near-miss gets diagnosed
+  // instead of silently skipped.
+  const candidate = FULL_DATE_RE.test(text) || LOOSE_DATE_RE.test(text);
+  const result: HeadingResult = { kind: "skipped", text, candidate };
+  if (!candidate) return result;
+  if (text.includes("\u00A0")) {
+    result.nearMiss = "the separator contains a no-break space where a plain space is required";
+  } else if (!FULL_DATE_RE.test(text)) {
+    result.nearMiss = "the date is unpadded — the grammar requires `YYYY-MM-DD`";
+  } else if (/\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(?!:)/.test(text)) {
+    result.nearMiss = "a time needs seconds and a UTC offset: `THH:MM:SSZ` or `THH:MM:SS±HH:MM`";
+  }
+  return result;
 }

@@ -1,4 +1,3 @@
-import { parseDocument } from "yaml";
 import { ESCAPE_HATCH_KEYS, PLATFORM_TAGS } from "../constants.js";
 import type { Diagnostic, LineIndex, Position } from "../diagnostics.js";
 import { parseIsoDate } from "./date.js";
@@ -10,6 +9,7 @@ import {
   asUrl,
   eachPair,
   isMap,
+  parseProfiled,
   YamlContext,
 } from "./yaml-utils.js";
 
@@ -40,9 +40,9 @@ export function parseEscapeHatch(
 ): EscapeHatch {
   const hatch: EscapeHatch = { position };
   const ctx = new YamlContext(baseOffset, lines, diagnostics, "hatch");
-  const doc = parseDocument(yamlText);
+  const doc = parseProfiled(ctx, yamlText);
 
-  if (ctx.yamlErrors(doc, "invalid-yaml")) return hatch;
+  if (doc === undefined || ctx.yamlErrors(doc, "invalid-yaml")) return hatch;
   if (!isMap(doc.contents)) {
     diagnostics.push({
       rule: "hatch/invalid-yaml",
@@ -117,7 +117,7 @@ export function parseEscapeHatch(
             ctx.report(
               "invalid-date",
               "error",
-              `\`date\` is not a valid ISO 8601 date: \`${date}\``,
+              `\`date\` is not a valid RFC 3339 date: \`${date}\``,
               pair.value,
             );
           } else {

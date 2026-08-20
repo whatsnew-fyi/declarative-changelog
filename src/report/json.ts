@@ -10,6 +10,8 @@ export function formatJson(results: readonly ValidationResult[]): string {
         level: r.level,
         levelName: r.levelName,
         entries: r.entryCount,
+        addressableEntries: r.addressableEntries,
+        skipped: r.skipped,
         counts: r.counts,
         diagnostics: r.diagnostics,
       })),

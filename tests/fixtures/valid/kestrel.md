@@ -7,6 +7,7 @@ product:
   id: kestrel
   description: A task runner for large repositories.
   platforms: [windows, macos, linux]
+  versioning: semver
   category: developer-tools
 document:
   updated: 2026-07-28T14:02:00Z
@@ -181,15 +182,17 @@ superseded-by: "2.2.0"
 
 ## About this example
 
-This heading does not match the release-heading grammar, so a consumer skips it — the same rule that
-skips `## Unreleased` at the top of the file. It is here to keep the annotation and the document in
-one place without breaking conformance.
+This heading contains no date, so it is not a release-heading candidate and a consumer skips it —
+the same rule that skips `## Unreleased` at the top of the file. A date-bearing heading that failed
+the grammar would be a conformance failure instead; editorial headings stay conformant by staying
+dateless. This one is here to keep the annotation and the document in one place without breaking
+conformance.
 
 What this document exercises:
 
 | Feature | Where |
 | :-- | :-- |
-| Skipped `##` headings | `Unreleased`, and this section |
+| Skipped `##` headings | `Unreleased`, and this section — dateless, so not candidates |
 | Version + title split | `2.4.0: Parallel task graphs` |
 | Versionless entry, with a title | `Watch mode — rewritten from scratch` |
 | Separator character inside a title | the same entry — the em dash in its title is never mistaken for the one before the date |
@@ -201,14 +204,16 @@ What this document exercises:
 | `**Breaking**` marker | `3.0.0-rc.1` — and it is a *major* bump, per version/content agreement |
 | Deprecate, then remove | `--serial` deprecated in `2.4.0`, removed in `3.0.0-rc.1` |
 | A removal that breaks nobody | `2.4.0` drops a variable that had been a no-op since 2.0 — deliberately *not* marked breaking |
-| Reference tails | `2.4.0` — issue links, `@wren`, `@finch`, a CVE link |
+| Reference tails | `2.4.0` — issue links, `@wren`, `@finch`, a CVE link — detached into structured references, never discarded |
 | `routine` tag | `2.4.1` |
 | `yanked` + platform tag | `2.1.3`, which also carries `superseded-by` as a yanked entry should |
 | Escape hatch — `channel` | `2.2.0` (`lts`) |
 | Escape hatch — `covers` | `2.3.0` — documents `2.3.1` and `2.3.2`, which have no entries |
+| Covered-version attribution | `2.3.0` — the bold `**2.3.1**` / `**2.3.2**` items, each naming a version from `covers` |
 | Escape hatch — `superseded-by` | `2.1.3` → `2.2.0` — a replacement, and it resolves to a real entry |
 | Level 1 only | `2.1.0` — thematic `###` headings, so no categories are extracted |
 | `coverage: partial` + `older` + `canonical` | Frontmatter |
+| `versioning: semver` | Frontmatter — what switches the version/content agreement check on |
 
 Every entry above reaches **Level 2 (Categorized)** except `2.1.0`, which organizes by subsystem
 rather than by category and therefore reaches **Level 1 (Structured)**. That entry is included on
