@@ -1,4 +1,4 @@
-import { type Level, entryLevel } from "./conformance.js";
+import { entryLevel, type Level } from "./conformance.js";
 import type { ChangelogModel, ReleaseEntry } from "./parse/document.js";
 
 /**

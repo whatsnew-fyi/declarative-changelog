@@ -21,7 +21,7 @@ import { type Frontmatter, parseFrontmatter } from "./frontmatter.js";
 import { type ParsedHeading, parseReleaseHeading } from "./heading.js";
 import { flattenInline } from "./inline.js";
 import { type ReducedChange, reduceChangeItem } from "./reduction.js";
-import { type Version, parseVersion } from "./version.js";
+import { parseVersion, type Version } from "./version.js";
 
 export interface ChangeItem extends ReducedChange {
   category: Category;

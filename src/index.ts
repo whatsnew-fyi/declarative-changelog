@@ -1,16 +1,16 @@
-import { LEVEL_NAMES, type Level, documentLevel, entryLevel } from "./conformance.js";
+import { documentLevel, entryLevel, LEVEL_NAMES, type Level } from "./conformance.js";
 import { type ConsumerView, toConsumerView } from "./consumer-view.js";
-import { type Diagnostic, countBySeverity } from "./diagnostics.js";
-import { type ChangelogModel, buildModel } from "./parse/document.js";
+import { countBySeverity, type Diagnostic } from "./diagnostics.js";
+import { buildModel, type ChangelogModel } from "./parse/document.js";
 import { type ArchiveIdentifiers, type RelationContext, runRules } from "./rules/index.js";
 
-export type { ChangelogModel, ReleaseEntry, Section, ChangeItem } from "./parse/document.js";
-export type { Diagnostic, Position, Severity } from "./diagnostics.js";
-export type { ConsumerView, ConsumerEntry, ConsumerChange } from "./consumer-view.js";
 export type { Level } from "./conformance.js";
 export { LEVEL_NAMES } from "./conformance.js";
-export { parseVersion, compareVersions } from "./parse/version.js";
+export type { ConsumerChange, ConsumerEntry, ConsumerView } from "./consumer-view.js";
+export type { Diagnostic, Position, Severity } from "./diagnostics.js";
+export type { ChangeItem, ChangelogModel, ReleaseEntry, Section } from "./parse/document.js";
 export { reduceChangeItem } from "./parse/reduction.js";
+export { compareVersions, parseVersion } from "./parse/version.js";
 
 export interface ValidateOptions {
   /** Identifiers from the `document.older` archive chain, when it was followed. */

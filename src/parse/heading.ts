@@ -2,7 +2,7 @@ import type { Heading, Link } from "mdast";
 import { SEPARATORS } from "../constants.js";
 import { DATE_AT_END_RE, type HeadingDate, parseIsoDate } from "./date.js";
 import { flattenInline } from "./inline.js";
-import { type Version, parseVersion } from "./version.js";
+import { parseVersion, type Version } from "./version.js";
 
 /**
  * The release-heading grammar, parsed right to left as the spec requires:

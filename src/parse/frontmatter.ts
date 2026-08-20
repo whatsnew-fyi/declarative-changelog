@@ -2,7 +2,7 @@ import { parseDocument } from "yaml";
 import { COVERAGE_VALUES, FRONTMATTER_KEYS, PLATFORM_TAGS, SPEC_VERSION } from "../constants.js";
 import type { Diagnostic, LineIndex } from "../diagnostics.js";
 import { parseIsoDate } from "./date.js";
-import { YamlContext, asString, asStringList, asUrl, eachPair, isMap } from "./yaml-utils.js";
+import { asString, asStringList, asUrl, eachPair, isMap, YamlContext } from "./yaml-utils.js";
 
 export interface Frontmatter {
   changelog?: string;
@@ -127,7 +127,7 @@ export function parseFrontmatter(
               const value = asString(ctx, p, "document.updated");
               if (value !== undefined) {
                 const date = parseIsoDate(value);
-                if (!date || !date.valid) {
+                if (!date?.valid) {
                   ctx.report(
                     "invalid-timestamp",
                     "error",

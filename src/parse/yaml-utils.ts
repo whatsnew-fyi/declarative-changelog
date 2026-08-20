@@ -1,4 +1,4 @@
-import { type Document, type Pair, type Node as YamlNode, isMap, isScalar, isSeq } from "yaml";
+import { type Document, isMap, isScalar, isSeq, type Pair, type Node as YamlNode } from "yaml";
 import type { Diagnostic, LineIndex, Position, Severity } from "../diagnostics.js";
 
 /** Bridges yaml's character ranges (relative to the YAML text) to file positions. */
@@ -115,5 +115,5 @@ export function eachPair(
   }
 }
 
-export { isMap, isScalar, isSeq };
 export type { Pair, YamlNode };
+export { isMap, isScalar, isSeq };

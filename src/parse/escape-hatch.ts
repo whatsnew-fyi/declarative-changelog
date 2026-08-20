@@ -4,13 +4,13 @@ import type { Diagnostic, LineIndex, Position } from "../diagnostics.js";
 import { parseIsoDate } from "./date.js";
 import { parseVersion } from "./version.js";
 import {
-  YamlContext,
   asBoolean,
   asString,
   asStringList,
   asUrl,
   eachPair,
   isMap,
+  YamlContext,
 } from "./yaml-utils.js";
 
 export interface EscapeHatch {
@@ -113,7 +113,7 @@ export function parseEscapeHatch(
         const date = asString(ctx, pair, "date");
         if (date !== undefined) {
           const parsed = parseIsoDate(date);
-          if (!parsed || !parsed.valid) {
+          if (!parsed?.valid) {
             ctx.report(
               "invalid-date",
               "error",

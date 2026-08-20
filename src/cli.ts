@@ -2,9 +2,9 @@
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import {
-  type ValidationResult,
   loadArchiveChain,
   parseChangelog,
+  type ValidationResult,
   validateChangelog,
 } from "./index.js";
 import { formatJson } from "./report/json.js";

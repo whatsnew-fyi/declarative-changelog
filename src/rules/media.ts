@@ -1,7 +1,7 @@
 import type { Node, Parent } from "mdast";
 import type { Diagnostic } from "../diagnostics.js";
-import { pos } from "../parse/document.js";
 import type { ChangelogModel } from "../parse/document.js";
+import { pos } from "../parse/document.js";
 
 export function checkMedia(model: ChangelogModel): Diagnostic[] {
   const out: Diagnostic[] = [];

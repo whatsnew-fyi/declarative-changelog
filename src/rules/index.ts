@@ -4,7 +4,7 @@ import { checkEntries } from "./entry.js";
 import { checkHeadings } from "./heading.js";
 import { checkIdentity } from "./identity.js";
 import { checkMedia } from "./media.js";
-import { type RelationContext, checkRelations } from "./relations.js";
+import { checkRelations, type RelationContext } from "./relations.js";
 import { checkVersionContent } from "./version-content.js";
 
 export type { ArchiveIdentifiers, RelationContext } from "./relations.js";
