@@ -35,7 +35,8 @@
     "test:watch": "vitest",
     "lint": "biome check src tests",
     "format": "biome format --write src tests",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "picocolors": "^1.1.1",
@@ -49,6 +50,7 @@
     "@biomejs/biome": "^2.5.9",
     "@types/mdast": "^4.0.4",
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"

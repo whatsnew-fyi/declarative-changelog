@@ -64,7 +64,8 @@ The spec is a draft; where it leaves room, this tool takes these positions:
 ## Development
 
 ```console
-npm test          # vitest — the spec's reference example is the primary fixture
-npm run build     # tsc → dist/
-npm run lint      # biome
+npm test               # vitest — the spec's reference example is the primary fixture
+npm run test:coverage  # v8 coverage: text summary + html + lcov in coverage/
+npm run build          # tsc → dist/
+npm run lint           # biome
 ```
