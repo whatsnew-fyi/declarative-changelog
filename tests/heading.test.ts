@@ -82,8 +82,16 @@ describe("release heading grammar", () => {
   });
 
   it("parses tags and timestamps", () => {
-    const view = parse("## 2.4.1 — 2026-07-14T09:12:00Z (routine, linux)");
-    expect(view.entries[0]).toMatchObject({ routine: true, platforms: ["linux"] });
+    const view = parse("## 2.4.1 — 2026-07-14T09:12:00Z (yanked, routine)");
+    expect(view.entries[0]).toMatchObject({ routine: true, yanked: true });
+  });
+
+  it("platform tokens are no longer tags — a consumer drops the token, keeps the release", () => {
+    const result = validate("## 2.4.1 — 2026-07-14 (routine, linux)\n\nBody.");
+    expect(result.entryCount).toBe(1);
+    expect(result.diagnostics.find((d) => d.rule === "heading/unknown-tag")?.message).toContain(
+      "linux",
+    );
   });
 
   it("rejects unknown tags as a validation error, keeping the entry", () => {

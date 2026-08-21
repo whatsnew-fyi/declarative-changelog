@@ -1,6 +1,7 @@
-import { ESCAPE_HATCH_KEYS, PLATFORM_TAGS } from "../constants.js";
+import { ESCAPE_HATCH_KEYS } from "../constants.js";
 import type { Diagnostic, LineIndex, Position } from "../diagnostics.js";
 import { parseIsoDate } from "./date.js";
+import { checkPlatforms } from "./frontmatter.js";
 import { parseVersion } from "./version.js";
 import {
   asBoolean,
@@ -65,20 +66,13 @@ export function parseEscapeHatch(
         hatch.prerelease = asBoolean(ctx, pair, "prerelease");
         break;
       case "platforms": {
-        const platforms = asStringList(ctx, pair, "platforms");
-        if (platforms) {
-          for (const platform of platforms) {
-            if (!(PLATFORM_TAGS as readonly string[]).includes(platform)) {
-              ctx.report(
-                "unknown-platform",
-                "error",
-                `Unknown platform \`${platform}\` — known platforms: ${PLATFORM_TAGS.join(", ")}`,
-                pair.value,
-              );
-            }
-          }
-          hatch.platforms = platforms;
-        }
+        const platforms = checkPlatforms(
+          ctx,
+          asStringList(ctx, pair, "platforms"),
+          "platforms",
+          pair.value,
+        );
+        if (platforms) hatch.platforms = platforms;
         break;
       }
       case "covers":

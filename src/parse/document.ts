@@ -12,7 +12,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
-import { CATEGORIES, type Category, PLATFORM_TAGS, type Tag } from "../constants.js";
+import { CATEGORIES, type Category, type Tag } from "../constants.js";
 import { type Diagnostic, LineIndex, type Position } from "../diagnostics.js";
 import type { HeadingDate } from "./date.js";
 import { parseIsoDate } from "./date.js";
@@ -50,7 +50,6 @@ export interface ReleaseEntry {
   url?: string;
   /** Raw tag tokens from the heading, unvalidated. */
   tags: string[];
-  tagsFromHeading: boolean;
   hatch?: EscapeHatch;
   /** Set when a ```changelog fence was not the first thing after the heading. */
   hatchMisplaced?: Position;
@@ -332,10 +331,9 @@ function buildEntry(
   const tags = parsed.tags;
   const yanked = tags.includes("yanked" satisfies Tag);
   const routine = tags.includes("routine" satisfies Tag);
-  const headingPlatforms = tags.filter((t) => isPlatformTag(t));
-  const platforms =
-    hatch?.platforms ??
-    (headingPlatforms.length > 0 ? headingPlatforms : model.frontmatter.product.platforms);
+  // The entry's platform set, where it differs from the product's — the
+  // heading run carries lifecycle only.
+  const platforms = hatch?.platforms ?? model.frontmatter.product.platforms;
 
   // `v2.4.1` and `2.4.1` are the same version and the same identifier; the
   // date portion only, even when the heading carries a time.
@@ -348,7 +346,6 @@ function buildEntry(
     position,
     date,
     tags,
-    tagsFromHeading: tags.length > 0,
     summary,
     sections,
     bodyNodes,
@@ -369,10 +366,6 @@ function buildEntry(
   if (hatch?.covers !== undefined) entry.covers = hatch.covers;
   if (hatch?.supersededBy !== undefined) entry.supersededBy = hatch.supersededBy;
   return entry;
-}
-
-function isPlatformTag(tag: string): boolean {
-  return (PLATFORM_TAGS as readonly string[]).includes(tag);
 }
 
 export function pos(node: {

@@ -5,9 +5,21 @@
 
 export const SPEC_VERSION = "0.1";
 
+/**
+ * The heading tag run carries lifecycle only — a fact about the release's
+ * *standing*, worth a scanning reader's eye. Platforms were walked out of the
+ * run; they live in `product.platforms` and the hatch's `platforms:`.
+ */
 export const LIFECYCLE_TAGS = ["yanked", "routine"] as const;
 
-export const PLATFORM_TAGS = [
+export const ALL_TAGS = [...LIFECYCLE_TAGS] as const;
+
+/**
+ * The closed platform value set — borrowed as OS names rather than as
+ * anyone's opinion. `product.platforms` and the escape hatch's `platforms:`
+ * both draw from it.
+ */
+export const PLATFORMS = [
   "windows",
   "macos",
   "linux",
@@ -18,8 +30,6 @@ export const PLATFORM_TAGS = [
   "xbox",
   "switch",
 ] as const;
-
-export const ALL_TAGS = [...LIFECYCLE_TAGS, ...PLATFORM_TAGS] as const;
 
 /**
  * The tag *grammar* is open even though the vocabulary is closed: a token that
@@ -42,7 +52,7 @@ export const CHANNEL_LIKE_PRERELEASE = [
 ] as const;
 
 export type LifecycleTag = (typeof LIFECYCLE_TAGS)[number];
-export type PlatformTag = (typeof PLATFORM_TAGS)[number];
+export type Platform = (typeof PLATFORMS)[number];
 export type Tag = (typeof ALL_TAGS)[number];
 
 /** Keep a Changelog's six categories, in canonical (non-alphabetical) order. */

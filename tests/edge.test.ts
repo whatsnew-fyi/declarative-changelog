@@ -177,7 +177,7 @@ describe("relations by id and archive", () => {
 
 describe("misc rule branches", () => {
   it("warns on a duplicate tag", () => {
-    expect(rules("## 2.4.0 — 2026-07-09 (linux, linux)\n\nBody.")).toContain(
+    expect(rules("## 2.4.0 — 2026-07-09 (yanked, yanked)\n\nBody.")).toContain(
       "heading/duplicate-tag",
     );
   });

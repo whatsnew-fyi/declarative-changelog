@@ -84,13 +84,16 @@ describe("frontmatter rules", () => {
     );
   });
 
-  it("rejects unknown platforms and warns on unknown keys", () => {
+  it("rejects unknown platforms and unknown product keys — closed sets", () => {
     const ids = rules(
       ENTRY,
       '---\nchangelog: "0.1"\nproduct:\n  platforms: [linux, amiga]\n  logo: x.png\n---',
     );
     expect(ids).toContain("frontmatter/unknown-platform");
     expect(ids).toContain("frontmatter/unknown-key");
+    // The consumer drops the unrecognized value and keeps the rest.
+    const view = parse(ENTRY, '---\nchangelog: "0.1"\nproduct:\n  platforms: [linux, amiga]\n---');
+    expect(view.entries[0]!.platforms).toEqual(["linux"]);
   });
 
   it("rejects a broken URL and a fake timestamp", () => {

@@ -134,14 +134,15 @@ channel: lts
 
 - Lockfile digests are verified before any task runs. A tampered lockfile now fails closed.
 
-## [2.1.3](https://kestrel.example/releases/2.1.3) — 2026-03-30 (yanked, linux)
+## [2.1.3](https://kestrel.example/releases/2.1.3) — 2026-03-30 (yanked)
 
 ```changelog
+platforms: [linux]
 superseded-by: "2.2.0"
 ```
 
-> Withdrawn. The Linux build shipped a resolver regression that could select the wrong task version.
-> 2.1.2 was the safe build until 2.2.0 shipped.
+> Withdrawn. A Linux-only build that shipped a resolver regression alongside its fix; 2.1.2 was
+> the safe build until 2.2.0 shipped.
 
 ### Fixed
 
@@ -206,7 +207,8 @@ What this document exercises:
 | A removal that breaks nobody | `2.4.0` drops a variable that had been a no-op since 2.0 — deliberately *not* marked breaking |
 | Reference tails | `2.4.0` — issue links, `@wren`, `@finch`, a CVE link — detached into structured references, never discarded |
 | `routine` tag | `2.4.1` |
-| `yanked` + platform tag | `2.1.3`, which also carries `superseded-by` as a yanked entry should |
+| `yanked` | `2.1.3`, which also carries `superseded-by` as a yanked entry should |
+| Escape hatch — `platforms` | `2.1.3` — a Linux-only build in a cross-platform product's changelog |
 | Escape hatch — `channel` | `2.2.0` (`lts`) |
 | Escape hatch — `covers` | `2.3.0` — documents `2.3.1` and `2.3.2`, which have no entries |
 | Covered-version attribution | `2.3.0` — the bold `**2.3.1**` / `**2.3.2**` items, each naming a version from `covers` |

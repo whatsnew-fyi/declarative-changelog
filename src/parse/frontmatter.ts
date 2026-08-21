@@ -1,7 +1,7 @@
 import {
   COVERAGE_VALUES,
   FRONTMATTER_KEYS,
-  PLATFORM_TAGS,
+  PLATFORMS,
   SPEC_VERSION,
   VERSIONING_VALUES,
   type Versioning,
@@ -44,6 +44,32 @@ export interface Frontmatter {
 
 const COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 const EXPLICIT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Platform values are a closed set. An unrecognized value is a validation
+ * error; a consumer drops the value and keeps the entry, so the returned list
+ * holds only the recognized values — or undefined when none survive.
+ */
+export function checkPlatforms(
+  ctx: YamlContext,
+  values: string[] | undefined,
+  keyPath: string,
+  node: unknown,
+): string[] | undefined {
+  if (values === undefined) return undefined;
+  for (const value of values) {
+    if (!(PLATFORMS as readonly string[]).includes(value)) {
+      ctx.report(
+        "unknown-platform",
+        "error",
+        `Unknown platform \`${value}\` in \`${keyPath}\` — the value set is closed: ${PLATFORMS.join(", ")}`,
+        node,
+      );
+    }
+  }
+  const known = values.filter((v) => (PLATFORMS as readonly string[]).includes(v));
+  return known.length > 0 ? known : undefined;
+}
 
 /**
  * The one fixed default-id algorithm: lowercase, Unicode NFKD with combining
@@ -114,20 +140,13 @@ export function parseFrontmatter(
               fm.product.homepage = asUrl(ctx, p, "product.homepage");
               break;
             case "platforms": {
-              const platforms = asStringList(ctx, p, "product.platforms");
-              if (platforms) {
-                for (const platform of platforms) {
-                  if (!(PLATFORM_TAGS as readonly string[]).includes(platform)) {
-                    ctx.report(
-                      "unknown-platform",
-                      "error",
-                      `Unknown platform \`${platform}\` in \`product.platforms\` — known platforms: ${PLATFORM_TAGS.join(", ")}`,
-                      p.value,
-                    );
-                  }
-                }
-                fm.product.platforms = platforms;
-              }
+              const platforms = checkPlatforms(
+                ctx,
+                asStringList(ctx, p, "product.platforms"),
+                "product.platforms",
+                p.value,
+              );
+              if (platforms) fm.product.platforms = platforms;
               break;
             }
             case "versioning": {
