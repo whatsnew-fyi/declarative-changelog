@@ -4,14 +4,28 @@
   "description": "Validator and reference parser for the Declarative Changelogs standard (v0.1 draft)",
   "keywords": [
     "changelog",
+    "declarative-changelog",
     "keep-a-changelog",
+    "release-notes",
     "validator",
     "lint",
-    "release-notes"
+    "parser",
+    "markdown",
+    "frontmatter",
+    "conformance"
   ],
+  "homepage": "https://whatsnew.fyi/spec",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/whatsnew-fyi/declarative-changelog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/whatsnew-fyi/declarative-changelog/issues"
+  },
   "license": "MIT",
   "author": "Jeffrey Walter Mixon <jeff.mixon@gmail.com>",
   "type": "module",
+  "sideEffects": false,
   "bin": {
     "declarative-changelog": "./dist/cli.js"
   },
@@ -24,7 +38,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20"
@@ -36,7 +51,8 @@
     "lint": "biome check src tests",
     "format": "biome format --write src tests",
     "cli": "tsx src/cli.ts",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run lint && npm test && npm run build && node dist/cli.js validate CHANGELOG.md --require-level 2"
   },
   "dependencies": {
     "picocolors": "^1.1.1",
