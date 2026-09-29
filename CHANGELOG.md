@@ -8,7 +8,7 @@ product:
   versioning: semver
   category: developer-tools
 document:
-  updated: 2026-08-21T00:00:00Z
+  updated: 2026-09-28T00:00:00Z
   coverage: complete
   canonical: https://github.com/whatsnew-fyi/declarative-changelog/blob/main/CHANGELOG.md
 ---
@@ -17,11 +17,13 @@ document:
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
 
-## Unreleased
+## [0.2.0](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.2.0) — 2026-09-28T00:00:00Z
+
+> `product.color` follows the spec's bare-hex form, and an empty color now says why it's empty.
 
 ### Changed
 
-- `product.color` now takes six bare hex digits (`1a73e8`), matching the spec. A leading `#` is still accepted and stripped, so parsed output always carries the bare form.
+- **Breaking** — `product.color` now takes six bare hex digits (`1a73e8`), matching the spec. A leading `#` is still accepted and stripped, so parsed output always carries the bare form.
 
 ### Fixed
 
