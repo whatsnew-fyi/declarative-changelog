@@ -167,7 +167,7 @@ Severity follows the spec's own language: **MUST → error**, **SHOULD → warni
 | `frontmatter/profile` | Anchors, aliases, tags, directives, or multi-document streams — outside the YAML profile |
 | `frontmatter/type` | A value of the wrong type |
 | `frontmatter/format` | A URL-valued key whose value is not a valid URL |
-| `frontmatter/invalid-color` | `product.color` is not one opaque `#RRGGBB` hex |
+| `frontmatter/invalid-color` | `product.color` is not six hex digits (a leading `#` is tolerated), or is empty because an unquoted `#` started a YAML comment |
 | `frontmatter/invalid-coverage` | `document.coverage` is not `complete` or `partial` |
 | `frontmatter/invalid-versioning` | `product.versioning` is not `semver`, `calver`, or `none` |
 | `frontmatter/invalid-timestamp` | `document.updated` is not an RFC 3339 timestamp |

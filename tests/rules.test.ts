@@ -75,13 +75,29 @@ describe("frontmatter rules", () => {
     ).not.toContain("frontmatter/older-required");
   });
 
-  it("rejects a color that is not #RRGGBB", () => {
-    expect(rules(ENTRY, '---\nchangelog: "0.1"\nproduct:\n  color: "rgb(1,2,3)"\n---')).toContain(
-      "frontmatter/invalid-color",
-    );
-    expect(rules(ENTRY, '---\nchangelog: "0.1"\nproduct:\n  color: "#A1B2C3"\n---')).not.toContain(
-      "frontmatter/invalid-color",
-    );
+  it("accepts six hex digits as product.color, bare or with a quoted #", () => {
+    for (const color of ["1a73e8", "000000", "A1B2C3", '"#A1B2C3"']) {
+      const src = `---\nchangelog: "0.1"\nproduct:\n  color: ${color}\n---`;
+      expect(rules(ENTRY, src)).not.toContain("frontmatter/invalid-color");
+    }
+  });
+
+  it("normalizes product.color to the bare form", () => {
+    const result = validate(ENTRY, '---\nchangelog: "0.1"\nproduct:\n  color: "#A1B2C3"\n---');
+    expect(result.model.frontmatter.product.color).toBe("A1B2C3");
+  });
+
+  it("rejects a color that is not six hex digits", () => {
+    for (const color of ['"rgb(1,2,3)"', "1a73e", "1a73e8ff", '"#1a73e"', "red"]) {
+      const src = `---\nchangelog: "0.1"\nproduct:\n  color: ${color}\n---`;
+      expect(rules(ENTRY, src)).toContain("frontmatter/invalid-color");
+    }
+  });
+
+  it("explains an empty color as an unquoted # that became a comment", () => {
+    const result = validate(ENTRY, '---\nchangelog: "0.1"\nproduct:\n  color: #1a73e8\n---');
+    const d = result.diagnostics.find((x) => x.rule === "frontmatter/invalid-color");
+    expect(d?.message).toMatch(/YAML comment/);
   });
 
   it("rejects unknown platforms and unknown product keys — closed sets", () => {

@@ -17,6 +17,16 @@ document:
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
 
+## Unreleased
+
+### Changed
+
+- `product.color` now takes six bare hex digits (`1a73e8`), matching the spec. A leading `#` is still accepted and stripped, so parsed output always carries the bare form.
+
+### Fixed
+
+- A `product.color` left empty by an unquoted `#` (`color: #1a73e8` parses as a YAML comment) now reports that cause instead of an empty value.
+
 ## [0.1.0](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.1.0) — 2026-08-21T00:00:00Z
 
 > First public release: a validator and reference parser for v0.1 of the Declarative Changelogs standard.

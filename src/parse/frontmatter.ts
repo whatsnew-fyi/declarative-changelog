@@ -42,7 +42,8 @@ export interface Frontmatter {
   valid: boolean;
 }
 
-const COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+/** Six hex digits; a leading `#` is tolerated and stripped. */
+const COLOR_RE = /^#?[0-9A-Fa-f]{6}$/;
 const EXPLICIT_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
@@ -182,16 +183,24 @@ export function parseFrontmatter(
             }
             case "color": {
               const color = asString(ctx, p, "product.color");
-              if (color !== undefined) {
+              if (color === "") {
+                // Almost always `color: #1a73e8`: an unquoted `#` opens a YAML comment.
+                ctx.report(
+                  "invalid-color",
+                  "error",
+                  "`product.color` has no value — an unquoted `#` starts a YAML comment; write the bare hex (`1a73e8`) or quote it",
+                  p.value ?? p.key,
+                );
+              } else if (color !== undefined) {
                 if (!COLOR_RE.test(color)) {
                   ctx.report(
                     "invalid-color",
                     "error",
-                    `\`product.color\` must be one opaque \`#RRGGBB\` hex, got \`${color}\``,
+                    `\`product.color\` must be six hex digits, like \`1a73e8\`, got \`${color}\``,
                     p.value,
                   );
                 } else {
-                  fm.product.color = color;
+                  fm.product.color = color.replace(/^#/, "");
                 }
               }
               break;
