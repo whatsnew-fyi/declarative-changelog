@@ -1,6 +1,6 @@
 {
   "name": "declarative-changelog",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Validator and reference parser for the Declarative Changelogs standard (v0.1 draft)",
   "keywords": [
     "changelog",

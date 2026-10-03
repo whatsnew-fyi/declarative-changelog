@@ -8,7 +8,7 @@ product:
   versioning: semver
   category: developer-tools
 document:
-  updated: 2026-09-28T00:00:00Z
+  updated: 2026-10-03T00:00:00Z
   coverage: complete
   canonical: https://github.com/whatsnew-fyi/declarative-changelog/blob/main/CHANGELOG.md
 ---
@@ -17,7 +17,9 @@ document:
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
 
-## Unreleased
+## [0.2.1](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.2.1) — 2026-10-03T00:00:00Z
+
+> The package now loads through `require()`, so CommonJS and `tsx` scripts can use it.
 
 ### Fixed
 
