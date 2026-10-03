@@ -17,6 +17,12 @@ document:
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
 
+## Unreleased
+
+### Fixed
+
+- The package can now be loaded with `require()`, including by `tsx` scripts in CommonJS projects. Its `exports` map declares a `default` condition next to `import`, so Node's `require(esm)` support (Node 20.19+, 22.12+) resolves it instead of failing with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+
 ## [0.2.0](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.2.0) — 2026-09-28T00:00:00Z
 
 > `product.color` follows the spec's bare-hex form, and an empty color now says why it's empty.
