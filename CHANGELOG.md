@@ -17,6 +17,24 @@ document:
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
 
+## [0.4.0](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.4.0) — 2026-10-14T00:00:00Z
+
+> Six release tools can now write a conforming changelog, each with tested configuration in `templates/`, and `normalize` handles the rest of what release-please and Changesets do to a file.
+
+### Added
+
+- Tested configuration in `templates/` for git-cliff, semantic-release and commit-and-tag-version, which conform on configuration alone; for release-please and Changesets, which conform after `normalize`; and for GoReleaser, which takes the tag's entry from `extract`. CI runs each real tool over a fixture repository and requires Level 2 with no warnings.
+- `normalize --write` and `--check` take several files, for a monorepo's packages.
+
+### Changed
+
+- `normalize` moves `## [Unreleased]` back above the entries it repairs, where release-please's next insert expects it, and lays out the sections of any entry whose heading it rewrote with `-` bullets and single blank lines.
+- `heading/skipped` no longer notes `## [Unreleased]` or a linked `## [Unreleased](…)`.
+
+### Fixed
+
+- `normalize` no longer leaves two blank lines above a trailing run of link definitions.
+
 ## [0.3.1](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.3.1) — 2026-10-14T00:00:00Z (routine)
 
 > The GitHub Action's description is shorter, to fit the Marketplace's 125-character limit. The CLI is unchanged.
