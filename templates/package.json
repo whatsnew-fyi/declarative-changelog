@@ -1,0 +1,20 @@
+{
+  "name": "declarative-changelog-templates",
+  "private": true,
+  "type": "module",
+  "description": "Runs each release tool against a fixture repository and checks that what its template writes conforms.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@changesets/cli": "3.0.3",
+    "@semantic-release/changelog": "7.0.0",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "commit-and-tag-version": "13.2.2",
+    "git-cliff": "2.14.2",
+    "release-please": "17.11.2",
+    "semantic-release": "25.0.9",
+    "vitest": "4.1.11"
+  }
+}

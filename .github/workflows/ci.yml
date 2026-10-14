@@ -29,6 +29,27 @@ jobs:
       # Dogfood: this repo's own changelog must be a conformant declarative changelog.
       - run: node dist/cli.js validate CHANGELOG.md --require-level 2 --max-warnings 0
 
+  templates:
+    name: Release-tool templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            templates/package-lock.json
+      - run: npm ci
+      # Each template runs the real tool, pinned in templates/package.json,
+      # over a fixture repository; its output must reach Level 2 with no
+      # warnings and match the golden file.
+      - run: npm ci
+        working-directory: templates
+      - run: npm test
+        working-directory: templates
+
   action:
     name: The GitHub Action, on this repository
     runs-on: ubuntu-latest

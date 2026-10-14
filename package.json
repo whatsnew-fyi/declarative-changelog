@@ -49,8 +49,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "biome check src tests",
-    "format": "biome format --write src tests",
+    "lint": "biome check src tests templates",
+    "format": "biome format --write src tests templates",
     "cli": "tsx src/cli.ts",
     "test:coverage": "vitest run --coverage",
     "prepublishOnly": "npm run lint && npm test && npm run build && node dist/cli.js validate CHANGELOG.md --require-level 2"

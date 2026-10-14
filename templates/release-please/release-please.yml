@@ -1,0 +1,41 @@
+# release-please, then `declarative-changelog normalize` on its release PR.
+#
+# release-please writes `## [1.2.0](compare) (2026-10-14)`, which the format's
+# heading grammar rejects, and files breaking changes under their own
+# section. normalize rewrites the new entry into a conforming one and commits
+# it to the release PR's branch. It runs again each time release-please
+# rebuilds the PR, so the PR you merge is always normalized.
+#
+# Save as .github/workflows/release-please.yml, next to
+# release-please-config.json and .release-please-manifest.json.
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v5
+
+      - if: steps.release.outputs.prs_created == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+
+      - if: steps.release.outputs.prs_created == 'true'
+        run: |
+          npx --yes declarative-changelog@0.4.0 normalize --write CHANGELOG.md
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --all --message "chore: normalize CHANGELOG.md"
+            git push
+          fi

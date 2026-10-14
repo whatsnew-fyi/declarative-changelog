@@ -15,6 +15,7 @@ This tool is both sides of that contract:
 - **`parse`** is the reference consumer — it emits the spec's Field Mapping table as JSON, salvage-oriented and deterministic.
 - **`normalize`** repairs what release-please and changesets write, so a project keeps its release tool and still publishes a conforming file.
 - **`extract`** prints one entry's notes, for a GitHub release body or goreleaser's `--release-notes`.
+- **[`templates/`](templates)** holds tested configuration for git-cliff, semantic-release, commit-and-tag-version, release-please, Changesets and GoReleaser.
 
 The spec is provisional; this tool tracks it. Every closed vocabulary (tags, categories, escape-hatch keys, frontmatter keys) lives in [`src/constants.ts`](src/constants.ts), so a spec revision is an edit to one file.
 
@@ -159,7 +160,7 @@ Repairs a changelog after a release tool has written to it, and prints the resul
 | `--all` | Repair headings and sections in every entry, for a first run on an existing file. Old entries are never dated |
 | `--keep-sections` | Leave changesets' Major/Minor/Patch Changes sections as they are |
 
-Run it right after the tool, then validate:
+Run it right after the tool, then validate. [`templates/`](templates) has the workflow for each tool:
 
 ```console
 npx changeset version && npx declarative-changelog normalize --write CHANGELOG.md
@@ -327,6 +328,8 @@ npm run test:coverage  # v8 coverage: text summary + html + lcov in coverage/
 npm run build          # tsc → dist/
 npm run lint           # biome
 ```
+
+The release-tool templates have their own test suite, which runs each tool for real: `cd templates && npm ci && npm test`. See [templates/README.md](templates/README.md).
 
 This repository's own [`CHANGELOG.md`](./CHANGELOG.md) is a declarative changelog, validated in CI by the tool itself. Contributions welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 

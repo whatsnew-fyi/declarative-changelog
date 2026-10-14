@@ -1,0 +1,39 @@
+# Changesets, with `declarative-changelog normalize` after `changeset version`.
+#
+# changesets writes `## 1.2.0` with no date, inside the frontmatter, under
+# Major, Minor and Patch Changes. normalize moves the entry below the
+# frontmatter, dates it, and files Major as Changed with the Breaking marker,
+# Minor as Added and Patch as Fixed (--keep-sections keeps the bump-level
+# names). The date is when the version PR was last rebuilt.
+#
+# Add the script to package.json, with declarative-changelog as a dev
+# dependency (a monorepo lists every package's file, say
+# `packages/*/CHANGELOG.md`):
+#
+#   "version-packages": "changeset version && declarative-changelog normalize --write CHANGELOG.md"
+#
+# then save this as .github/workflows/release.yml.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: changesets/action@v2
+        with:
+          version-script: npm run version-packages
+          # Add `publish-script` here as your project publishes today.

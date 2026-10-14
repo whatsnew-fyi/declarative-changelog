@@ -1,0 +1,95 @@
+# git-cliff configuration that writes a Declarative Changelog
+# (https://whatsnew.fyi/spec). Needs git-cliff 2.14.1 or later, the first
+# release whose --prepend replaces a header that changes between runs. On an
+# older one, drop the `updated:` lines from `header`.
+#
+# Edit the product name in `header` and the repository URL in
+# `postprocessors`, then:
+#
+#   git cliff -o CHANGELOG.md
+#       writes the whole file from the tags
+#   git cliff --unreleased --tag v1.2.0 --prepend CHANGELOG.md
+#       adds one release to the file
+#
+# Commit types map to the format's six categories. `security`, `deprecate`
+# and `remove` are extensions: stock Conventional Commits has no type for
+# them. A release of nothing but docs, style, refactor, test, build, ci or
+# chore commits is tagged `(routine)`, and a breaking commit of one of those
+# types shows under Changed.
+
+[changelog]
+# The frontmatter. `document.updated` is the newest release's time.
+header = """
+---
+changelog: "0.1"
+product:
+  name: Kestrel
+  homepage: <REPO>
+  versioning: semver
+document:
+{%- for release in releases %}{% if release.version %}
+  updated: {{ release.timestamp | date(format="%Y-%m-%dT%H:%M:%SZ") }}
+{%- break %}{% endif %}{% endfor %}
+  canonical: <REPO>/blob/main/CHANGELOG.md
+---
+
+# Kestrel changelog
+"""
+# Lets --prepend find the end of a header that changes between runs.
+header_marker = "<!-- git-cliff: end of header -->"
+body = """
+
+{% set routine = "<!-- 9 -->Routine" -%}
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}](<REPO>/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%dT%H:%M:%SZ") }}
+{%- if commits | filter(attribute="group", value=routine) | length == commits | length %} (routine){% endif %}
+{% else -%}
+## [Unreleased]
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") -%}
+{% if group != routine %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.breaking %}**Breaking** — {% endif -%}
+{% if commit.scope %}**{{ commit.scope }}:** {% endif -%}
+{{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))
+{%- if commit.breaking_description and commit.breaking_description != commit.message %}
+  - {{ commit.breaking_description | upper_first }}
+{%- endif -%}
+{% endfor %}
+{% endif -%}
+{% endfor -%}
+"""
+# Keeps the frontmatter's indentation; the template manages its own blank lines.
+trim = false
+render_always = true
+postprocessors = [
+  # Your repository's URL.
+  { pattern = "<REPO>", replace = "https://github.com/acme/kestrel" },
+]
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_preprocessors = [
+  # `(#12)` becomes a link to the issue.
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](<REPO>/issues/${2}))" },
+]
+# The `<!-- n -->` prefix sorts the sections into the format's order, and the
+# template strips it.
+commit_parsers = [
+  { message = "^feat[(!:]", group = "<!-- 0 -->Added" },
+  { message = "^(perf|revert)[(!:]", group = "<!-- 1 -->Changed" },
+  { message = "^deprecate[(!:]", group = "<!-- 2 -->Deprecated" },
+  { message = "^remove[(!:]", group = "<!-- 3 -->Removed" },
+  { message = "^fix[(!:]", group = "<!-- 4 -->Fixed" },
+  { message = "^security[(!:]", group = "<!-- 5 -->Security" },
+  { field = "breaking", pattern = "true", group = "<!-- 1 -->Changed" },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = ".*", group = "<!-- 9 -->Routine" },
+]
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

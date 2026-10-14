@@ -1,0 +1,35 @@
+# GoReleaser, with the release notes taken from CHANGELOG.md.
+#
+# GoReleaser writes release notes; it does not write a changelog file. Keep
+# CHANGELOG.md as the one place the notes are written, and hand GoReleaser
+# the entry for the tag being released. `extract` exits 1 when the file has
+# no entry for that version, so a tag pushed before its notes fails here
+# instead of shipping an empty release.
+#
+# Save as .github/workflows/release.yml.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: npx --yes declarative-changelog@0.4.0 extract CHANGELOG.md "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --clean --release-notes ${{ runner.temp }}/notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
