@@ -8,7 +8,7 @@ product:
   versioning: semver
   category: developer-tools
 document:
-  updated: 2026-10-03T00:00:00Z
+  updated: 2026-10-14T00:00:00Z
   coverage: complete
   canonical: https://github.com/whatsnew-fyi/declarative-changelog/blob/main/CHANGELOG.md
 ---
@@ -16,6 +16,25 @@ document:
 # declarative-changelog changelog
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
+
+## [0.3.0](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.3.0) — 2026-10-14T00:00:00Z
+
+> Release tools can write a conforming changelog: `normalize` repairs what release-please and changesets produce, and the repository is now a GitHub Action and a pre-commit hook.
+
+### Added
+
+- `normalize` command that repairs new entries after a release tool writes them: release-please's `(date)` headings, changesets' undated headings and Major/Minor/Patch sections, `### ⚠ BREAKING CHANGES` items (marked with `**Breaking**` where they belong), tool section names, section order, a displaced frontmatter, and `document.updated`. `--check` fails when a file needs it; `--all` repairs history without re-dating it.
+- `extract` command that prints one entry's notes as markdown, for GitHub release bodies and goreleaser's `--release-notes`.
+- `--format github` for `validate`, which writes workflow annotations GitHub pins to the line in a PR.
+- A GitHub Action (`uses: whatsnew-fyi/declarative-changelog@v0`) that validates with annotations and can ask What's New to read the changelog after a deploy.
+- A pre-commit hook (`id: declarative-changelog`) that runs the published CLI at its tag.
+- `heading/bracketed-label` warning for `## [1.2.3] - date` with no `[1.2.3]: url` definition, which leaves the release with a title and no version.
+- `normalizeChangelog` and `extractEntry` in the library.
+
+### Fixed
+
+- A release heading written as a reference link, `## [1.2.3] - date` with `[1.2.3]: url` at the foot of the file (Keep a Changelog's own style), now carries that URL.
+- Link definitions at the foot of the file are no longer read as content of the last entry's last section, which reported `entry/section-content`.
 
 ## [0.2.1](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.2.1) — 2026-10-03T00:00:00Z
 
