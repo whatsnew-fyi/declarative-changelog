@@ -1,0 +1,84 @@
+name: Validate Declarative Changelog
+description: >-
+  Validates CHANGELOG.md against the Declarative Changelogs format, annotates
+  problems on the PR, and can tell What's New a new release is out.
+author: What's New (whatsnew.fyi)
+
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  files:
+    description: The changelog files to validate, separated by spaces or newlines.
+    default: CHANGELOG.md
+  require-level:
+    description: >-
+      Fail unless every file reaches this conformance level: 1 (Structured) or
+      2 (Categorized). Empty to report the level without enforcing it.
+    default: "2"
+  max-warnings:
+    description: Fail when more than this many warnings are reported. Empty for no limit.
+    default: ""
+  ping-url:
+    description: >-
+      The public URL your changelog is served at, as What's New tracks it
+      (`https://example.com/.well-known/changelog.md`). When set and validation
+      passes, What's New is asked to read it now instead of on its next poll.
+      Run this step after your deploy. A URL What's New does not track yet is a
+      warning with a link to suggest it, never a failure.
+    default: ""
+  version:
+    description: >-
+      The declarative-changelog CLI version to run. Default: the version this
+      action's tag names (`v0` runs the newest 0.x), or the newest release
+      when the action is used from a branch or a commit.
+    default: ""
+  api-url:
+    description: The What's New origin for the ping. Change it only to test.
+    default: https://whatsnew.fyi
+
+runs:
+  using: composite
+  steps:
+    - name: Validate
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+        INPUT_FILES: ${{ inputs.files }}
+        INPUT_REQUIRE_LEVEL: ${{ inputs.require-level }}
+        INPUT_MAX_WARNINGS: ${{ inputs.max-warnings }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        # The CLI version: the input, else the action's own tag, else latest.
+        spec="${INPUT_VERSION:-}"
+        if [ -z "$spec" ]; then
+          ref="${ACTION_REF#v}"
+          if [[ "$ref" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then spec="$ref"; else spec="latest"; fi
+        fi
+        args=(validate --format github)
+        if [ -n "$INPUT_REQUIRE_LEVEL" ]; then args+=(--require-level "$INPUT_REQUIRE_LEVEL"); fi
+        if [ -n "$INPUT_MAX_WARNINGS" ]; then args+=(--max-warnings "$INPUT_MAX_WARNINGS"); fi
+        # shellcheck disable=SC2206 # word splitting on the file list is the point
+        files=($INPUT_FILES)
+        npx --yes "declarative-changelog@${spec}" "${args[@]}" "${files[@]}"
+
+    - name: Ping What's New
+      if: inputs.ping-url != ''
+      shell: bash
+      env:
+        PING_URL: ${{ inputs.ping-url }}
+        API_URL: ${{ inputs.api-url }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        set -uo pipefail
+        body="$(mktemp)"
+        status="$(curl -sS -o "$body" -w '%{http_code}' --max-time 30 \
+          -A "declarative-changelog-action/${ACTION_REF:-dev}" \
+          -X POST --data-urlencode "url=${PING_URL}" "${API_URL%/}/api/ping")" || status="000"
+        case "$status" in
+          202) echo "::notice title=What's New::Asked What's New to read ${PING_URL} now." ;;
+          404) echo "::warning title=What's New::What's New does not track ${PING_URL} yet. Suggest it at ${API_URL%/}/suggest" ;;
+          *) echo "::warning title=What's New::The ping answered ${status}: $(head -c 300 "$body")" ;;
+        esac

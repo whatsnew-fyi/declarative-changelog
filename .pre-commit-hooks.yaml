@@ -1,0 +1,15 @@
+# pre-commit (https://pre-commit.com). In .pre-commit-config.yaml:
+#
+#   - repo: https://github.com/whatsnew-fyi/declarative-changelog
+#     rev: v0.3.0
+#     hooks:
+#       - id: declarative-changelog
+#
+# The hook runs the CLI published to npm at the tag's version through npx, so
+# it needs Node 20+ on the machine and builds nothing.
+- id: declarative-changelog
+  name: Validate the declarative changelog
+  description: Validates CHANGELOG.md against the Declarative Changelogs format, at Level 2.
+  entry: scripts/pre-commit.sh validate --require-level 2
+  language: script
+  files: ^CHANGELOG\.md$

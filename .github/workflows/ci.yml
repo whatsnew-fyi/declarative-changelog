@@ -28,3 +28,22 @@ jobs:
       - run: npm test
       # Dogfood: this repo's own changelog must be a conformant declarative changelog.
       - run: node dist/cli.js validate CHANGELOG.md --require-level 2 --max-warnings 0
+
+  action:
+    name: The GitHub Action, on this repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # The action runs the CLI from npm; point it at this commit's build instead.
+      - id: pack
+        run: echo "tarball=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
+      - uses: ./
+        with:
+          version: file:./${{ steps.pack.outputs.tarball }}
+          max-warnings: "0"

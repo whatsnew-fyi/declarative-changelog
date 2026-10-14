@@ -13,6 +13,8 @@ This tool is both sides of that contract:
 
 - **`validate`** is the loud authoring-time check — an editor plugin, a pre-commit hook, CI. Its job is to kill the typo while the publisher is still looking at the file.
 - **`parse`** is the reference consumer — it emits the spec's Field Mapping table as JSON, salvage-oriented and deterministic.
+- **`normalize`** repairs what release-please and changesets write, so a project keeps its release tool and still publishes a conforming file.
+- **`extract`** prints one entry's notes, for a GitHub release body or goreleaser's `--release-notes`.
 
 The spec is provisional; this tool tracks it. Every closed vocabulary (tags, categories, escape-hatch keys, frontmatter keys) lives in [`src/constants.ts`](src/constants.ts), so a spec revision is an edit to one file.
 
@@ -112,7 +114,7 @@ Addressability — whether every entry has its own URL — is reported alongside
 
 | Flag | Effect |
 | :-- | :-- |
-| `--format pretty\|json` | Output format. The JSON schema is versioned (`schemaVersion`) for CI use |
+| `--format pretty\|json\|github` | Output format. The JSON schema is versioned (`schemaVersion`) for CI use; `github` writes workflow annotations that GitHub pins to the line in a PR |
 | `--require-level 1\|2` | Exit non-zero unless every document reaches the level |
 | `--max-warnings <n>` | Exit non-zero when more than `n` warnings are reported |
 | `--follow-older` | Fetch the `document.older` archive chain so `superseded-by` can resolve across documents (network; off by default) |
@@ -136,6 +138,74 @@ Emits the consumer view — the spec's Field Mapping table as JSON: derived entr
 | :-- | :-- |
 | `--compact` | Single-line JSON (default: pretty-printed) |
 
+### `normalize <file|->`
+
+Repairs a changelog after a release tool has written to it, and prints the result (or rewrites the file with `--write`). Only the **new** entries are touched, meaning the ones above the newest entry that already conforms, so history stays byte for byte:
+
+- `## [1.3.0](compare) (2026-10-14)`, release-please's heading, becomes `## [1.3.0](compare) - 2026-10-14`.
+- An undated `## 1.3.0`, which changesets writes and every consumer skips, gets `--date` (default: now, UTC, to the second).
+- Items under `### ⚠ BREAKING CHANGES` get the `**Breaking** — ` marker on their twin in the category they belong to, or move to `### Changed` when they have none.
+- Tool section names become categories: Features → Added, Bug Fixes → Fixed, Performance Improvements and Reverts → Changed, and changesets' Major/Minor/Patch Changes → Changed with the Breaking marker, Added and Fixed. Any other section is left where it is.
+- Sections are merged and put in canonical order.
+- A frontmatter block a tool pushed down the file, or wrote an entry into, goes back to the top, and `document.updated` moves forward to the newest date.
+
+| Flag | Effect |
+| :-- | :-- |
+| `--write` | Rewrite the file in place |
+| `--check` | Exit `1` when the file needs normalizing, and change nothing |
+| `--date <rfc3339>` | The date for new undated entries |
+| `--all` | Repair headings and sections in every entry, for a first run on an existing file. Old entries are never dated |
+| `--keep-sections` | Leave changesets' Major/Minor/Patch Changes sections as they are |
+
+Run it right after the tool, then validate:
+
+```console
+npx changeset version && npx declarative-changelog normalize --write CHANGELOG.md
+npx declarative-changelog validate CHANGELOG.md --require-level 2
+```
+
+### `extract <file|-> [version|latest]`
+
+Prints one entry's notes as markdown: the entry as written, without its heading, its escape hatch or the file's link definitions. `latest` (the default) is the newest entry that is not yanked; a version matches with or without its `v`. Exit `1` when there is no such entry.
+
+```console
+npx declarative-changelog extract CHANGELOG.md > notes.md
+goreleaser release --release-notes notes.md
+```
+
+## In CI and pre-commit
+
+The repository is also a GitHub Action. It validates, annotates each problem on the PR, and can ask [What's New](https://whatsnew.fyi) to read the changelog now instead of on its next poll:
+
+```yaml
+- uses: whatsnew-fyi/declarative-changelog@v0
+  with:
+    files: CHANGELOG.md   # default
+    require-level: 2      # default
+    max-warnings: 0
+```
+
+To ping after a deploy, pass the URL the changelog is served at. A URL What's New does not track yet is a warning with a link to suggest it, never a failure:
+
+```yaml
+- uses: whatsnew-fyi/declarative-changelog@v0
+  with:
+    ping-url: https://example.com/.well-known/changelog.md
+```
+
+The action runs the CLI version its tag names (`v0` runs the newest 0.x) through `npx`; `version:` pins another (0.3.0 or later).
+
+For [pre-commit](https://pre-commit.com):
+
+```yaml
+- repo: https://github.com/whatsnew-fyi/declarative-changelog
+  rev: v0.3.0
+  hooks:
+    - id: declarative-changelog
+```
+
+The hook runs the published CLI at the tag's version through `npx`, so it needs Node.js 20 or later and builds nothing.
+
 ## Library
 
 The same two operations, plus the archive-chain loader, with full TypeScript types:
@@ -152,6 +222,8 @@ view.entries[0]?.id;   // "kestrel@3.1.0"
 ```
 
 `validateChangelog` and `parseChangelog` are pure and synchronous; network access happens only in `loadArchiveChain`, and only when you call it.
+
+`normalizeChangelog(source, options)` returns `{ output, changes }`, and `extractEntry(source, "latest")` returns `{ heading, version, markdown }`, both pure as well.
 
 ## Rules
 
@@ -208,6 +280,7 @@ Severity follows the spec's own language: **MUST → error**, **SHOULD → warni
 | `frontmatter/id-shape` | An explicit id should match `[a-z0-9][a-z0-9-]*` |
 | `heading/duplicate-tag` | The same tag twice in one run |
 | `heading/channel-as-prerelease` | `338.13-Stable` is, per the grammar, a pre-release named `Stable` |
+| `heading/bracketed-label` | `## [1.2.3] - date` with no `[1.2.3]: url` definition: CommonMark leaves the brackets as text, so the release has a title and no version |
 | `document/multiple-titles` | More than one `#` title |
 | `document/title-missing` | No `#` title |
 | `entry/empty-section` | A category heading with no items |
@@ -242,6 +315,7 @@ The spec is a draft; where it leaves room, this tool takes these positions:
 - **Link-only bodies** are flagged when an entry has no sections, no summary, and its whole body is one link or bare URL.
 - **Version grammar is the spec's, not semver's** — `338.13` and `1.2.3.4` are versions; `1.0rc1` (PEP 440) is a title.
 - **A date-only value means midnight UTC**, for ordering and for identity.
+- **A reference-style heading is a link.** `## [1.2.3] - date` with a `[1.2.3]: url` definition anywhere in the file has that URL, as CommonMark renders it. Definitions are document furniture: the ones Keep a Changelog keeps at the foot are not content of the last entry.
 
 ## Development
 
