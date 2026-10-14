@@ -1,7 +1,7 @@
 name: Validate Declarative Changelog
 description: >-
   Validates CHANGELOG.md against the Declarative Changelogs format, annotates
-  problems on the PR, and can tell What's New a new release is out.
+  the PR, and can ping What's New on release.
 author: What's New (whatsnew.fyi)
 
 branding:

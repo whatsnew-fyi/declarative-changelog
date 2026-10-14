@@ -199,7 +199,7 @@ For [pre-commit](https://pre-commit.com):
 
 ```yaml
 - repo: https://github.com/whatsnew-fyi/declarative-changelog
-  rev: v0.3.0
+  rev: v0.3.1
   hooks:
     - id: declarative-changelog
 ```

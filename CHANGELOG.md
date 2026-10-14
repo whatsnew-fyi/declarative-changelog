@@ -17,6 +17,10 @@ document:
 
 This file is itself a declarative changelog, validated in CI by the tool it describes.
 
+## [0.3.1](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.3.1) — 2026-10-14T00:00:00Z (routine)
+
+> The GitHub Action's description is shorter, to fit the Marketplace's 125-character limit. The CLI is unchanged.
+
 ## [0.3.0](https://github.com/whatsnew-fyi/declarative-changelog/releases/tag/v0.3.0) — 2026-10-14T00:00:00Z
 
 > Release tools can write a conforming changelog: `normalize` repairs what release-please and changesets produce, and the repository is now a GitHub Action and a pre-commit hook.

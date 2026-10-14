@@ -1,7 +1,7 @@
 # pre-commit (https://pre-commit.com). In .pre-commit-config.yaml:
 #
 #   - repo: https://github.com/whatsnew-fyi/declarative-changelog
-#     rev: v0.3.0
+#     rev: v0.3.1
 #     hooks:
 #       - id: declarative-changelog
 #
