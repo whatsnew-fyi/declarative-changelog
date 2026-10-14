@@ -138,9 +138,9 @@ Emits the consumer view — the spec's Field Mapping table as JSON: derived entr
 | :-- | :-- |
 | `--compact` | Single-line JSON (default: pretty-printed) |
 
-### `normalize <file|->`
+### `normalize <file...|->`
 
-Repairs a changelog after a release tool has written to it, and prints the result (or rewrites the file with `--write`). Only the **new** entries are touched, meaning the ones above the newest entry that already conforms, so history stays byte for byte:
+Repairs a changelog after a release tool has written to it, and prints the result (or rewrites the files with `--write`; a monorepo passes every package's). Only the **new** entries are touched, meaning the ones above the newest entry that already conforms, so history stays byte for byte:
 
 - `## [1.3.0](compare) (2026-10-14)`, release-please's heading, becomes `## [1.3.0](compare) - 2026-10-14`.
 - An undated `## 1.3.0`, which changesets writes and every consumer skips, gets `--date` (default: now, UTC, to the second).
@@ -148,11 +148,13 @@ Repairs a changelog after a release tool has written to it, and prints the resul
 - Tool section names become categories: Features → Added, Bug Fixes → Fixed, Performance Improvements and Reverts → Changed, and changesets' Major/Minor/Patch Changes → Changed with the Breaking marker, Added and Fixed. Any other section is left where it is.
 - Sections are merged and put in canonical order.
 - A frontmatter block a tool pushed down the file, or wrote an entry into, goes back to the top, and `document.updated` moves forward to the newest date.
+- `## [Unreleased]`, which release-please writes each release above, goes back above the new entries.
+- A new entry's sections are laid out alike: `-` bullets, one blank line between blocks.
 
 | Flag | Effect |
 | :-- | :-- |
 | `--write` | Rewrite the file in place |
-| `--check` | Exit `1` when the file needs normalizing, and change nothing |
+| `--check` | Exit `1` when any file needs normalizing, and change nothing |
 | `--date <rfc3339>` | The date for new undated entries |
 | `--all` | Repair headings and sections in every entry, for a first run on an existing file. Old entries are never dated |
 | `--keep-sections` | Leave changesets' Major/Minor/Patch Changes sections as they are |
@@ -302,7 +304,7 @@ Severity follows the spec's own language: **MUST → error**, **SHOULD → warni
 | Rule | What it catches |
 | :-- | :-- |
 | `heading/date-only` | A date-only value means midnight UTC and is a lossy sort key |
-| `heading/skipped` | Dateless headings are not candidates; suppressed for `## Unreleased` |
+| `heading/skipped` | Dateless headings are not candidates; suppressed for `## Unreleased`, bracketed or linked |
 | `conformance/uncategorized-sections` | An entry organizes changes under sections other than the six categories, so it reaches Level 1, not Level 2 |
 | `document/no-entries` | The document contains no release entries |
 

@@ -15,6 +15,12 @@ export const LIFECYCLE_TAGS = ["yanked", "routine"] as const;
 export const ALL_TAGS = [...LIFECYCLE_TAGS] as const;
 
 /**
+ * Keep a Changelog's heading for work not yet released — bare, bracketed, or
+ * linked to a compare view. Never a candidate, and never worth a note.
+ */
+export const UNRELEASED_RE = /^\[?unreleased\]?(?:\([^)\s]*\))?$/i;
+
+/**
  * The closed platform value set — borrowed as OS names rather than as
  * anyone's opinion. `product.platforms` and the escape hatch's `platforms:`
  * both draw from it.

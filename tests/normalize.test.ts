@@ -126,6 +126,47 @@ ${HISTORY}
     expect(changes).toContain("moved the frontmatter back to the top");
     expect(check(output).problems).toEqual([]);
   });
+
+  it("puts Unreleased back above the entries release-please wrote over it", () => {
+    // The first release: release-please's only anchor was `## [Unreleased]`.
+    const first = `${FRONTMATTER}
+
+# Kestrel changelog
+
+## 1.0.0 (2026-10-14)
+
+
+### Features
+
+* first release
+
+## [Unreleased]
+
+[Unreleased]: https://github.com/acme/kestrel/compare/v1.0.0...HEAD
+`;
+    const once = normal(first);
+    expect(once.output).toContain(
+      "# Kestrel changelog\n\n## [Unreleased]\n\n## 1.0.0 - 2026-10-14\n\n### Added\n\n- first release\n\n[Unreleased]: https://github.com/acme/kestrel/compare/v1.0.0...HEAD\n",
+    );
+    expect(once.changes[0]).toBe("moved `## [Unreleased]` back above the new entries");
+    expect(check(once.output)).toEqual({ level: 2, problems: [] });
+
+    // Every later release lands above Unreleased again, and below it stays history.
+    const later = once.output.replace(
+      "## [Unreleased]\n",
+      "## [1.1.0](https://github.com/acme/kestrel/compare/v1.0.0...v1.1.0) (2026-10-20)\n\n\n### Bug Fixes\n\n* a fix\n\n## [Unreleased]\n\nNotes for the next one.\n",
+    );
+    const twice = normal(later).output;
+    expect(twice).toContain(
+      "# Kestrel changelog\n\n## [Unreleased]\n\nNotes for the next one.\n\n## [1.1.0](https://github.com/acme/kestrel/compare/v1.0.0...v1.1.0) - 2026-10-20\n\n### Fixed\n\n- a fix\n\n## 1.0.0 - 2026-10-14\n",
+    );
+    expect(normal(twice)).toEqual({ output: twice, changes: [] });
+  });
+
+  it("leaves Unreleased alone when it is already on top, or below history only", () => {
+    const below = `${FRONTMATTER}\n\n# Kestrel changelog\n\n${HISTORY}\n\n## [Unreleased]\n`;
+    expect(normal(below)).toEqual({ output: below, changes: [] });
+  });
 });
 
 describe("normalize — changesets", () => {

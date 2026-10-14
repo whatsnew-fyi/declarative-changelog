@@ -1,4 +1,4 @@
-import { ALL_TAGS, CHANNEL_LIKE_PRERELEASE } from "../constants.js";
+import { ALL_TAGS, CHANNEL_LIKE_PRERELEASE, UNRELEASED_RE } from "../constants.js";
 import type { Diagnostic } from "../diagnostics.js";
 import type { ChangelogModel } from "../parse/document.js";
 import { parseVersion } from "../parse/version.js";
@@ -89,7 +89,7 @@ export function checkHeadings(model: ChangelogModel): Diagnostic[] {
         message: `\`## ${skipped.text}\` contains a date but does not parse under the release-heading grammar${diagnosis}; consumers skip it`,
         position: skipped.position,
       });
-    } else if (skipped.text.trim().toLowerCase() !== "unreleased") {
+    } else if (!UNRELEASED_RE.test(skipped.text.trim())) {
       out.push({
         rule: "heading/skipped",
         severity: "info",

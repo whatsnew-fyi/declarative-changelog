@@ -16,7 +16,7 @@ import { formatPretty } from "./report/pretty.js";
 const USAGE = `Usage:
   declarative-changelog validate  <file...|->  [options]
   declarative-changelog parse     <file|->     [options]
-  declarative-changelog normalize <file|->     [options]
+  declarative-changelog normalize <file...|->  [options]
   declarative-changelog extract   <file|->     [version|latest]
 
 Validate options:
@@ -32,8 +32,8 @@ Parse options:
   --compact                Single-line JSON (default: pretty-printed)
 
 Normalize options (repairs what release-please and changesets write):
-  --write                  Rewrite the file in place (default: print it)
-  --check                  Exit 1 if the file needs normalizing; change nothing
+  --write                  Rewrite the files in place (default: print the one file)
+  --check                  Exit 1 if any file needs normalizing; change nothing
   --date <rfc3339>         Date for new undated entries (default: now, UTC)
   --all                    Repair every entry, not only the new ones (never re-dates)
   --keep-sections          Keep changesets' Major/Minor/Patch Changes sections
@@ -167,44 +167,52 @@ async function parse(files: string[], flags: Flags): Promise<number> {
 }
 
 async function normalize(files: string[], flags: Flags): Promise<number> {
-  if (files.length !== 1) {
-    console.error(`normalize takes exactly one file (or \`-\` for stdin)\n\n${USAGE}`);
+  const inPlace = flags.write || flags.check;
+  if (files.length === 0 || (files.length > 1 && !inPlace)) {
+    console.error(
+      `normalize takes one file (or \`-\` for stdin), or several with --write or --check\n\n${USAGE}`,
+    );
     return 2;
   }
-  const file = files[0]!;
-  if (flags.write && file === "-") {
+  if (inPlace && files.length > 1 && files.includes("-")) {
+    console.error("stdin (`-`) cannot be one of several files");
+    return 2;
+  }
+  if (flags.write && files[0] === "-") {
     console.error("--write needs a file, not stdin");
     return 2;
   }
-  const source = await read(file);
-  let result: ReturnType<typeof normalizeChangelog>;
-  try {
-    result = normalizeChangelog(source, {
-      ...(flags.date === undefined ? {} : { date: flags.date }),
-      all: flags.all ?? false,
-      keepSections: flags["keep-sections"] ?? false,
-    });
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    return 2;
-  }
-  const label = file === "-" ? "<stdin>" : file;
-  const report = result.changes.length
-    ? `${label}: ${result.changes.length} ${result.changes.length === 1 ? "change" : "changes"}\n${result.changes.map((c) => `  ${c}`).join("\n")}`
-    : `${label}: already normal`;
+  let status = 0;
+  for (const file of files) {
+    const source = await read(file);
+    let result: ReturnType<typeof normalizeChangelog>;
+    try {
+      result = normalizeChangelog(source, {
+        ...(flags.date === undefined ? {} : { date: flags.date }),
+        all: flags.all ?? false,
+        keepSections: flags["keep-sections"] ?? false,
+      });
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      return 2;
+    }
+    const label = file === "-" ? "<stdin>" : file;
+    const report = result.changes.length
+      ? `${label}: ${result.changes.length} ${result.changes.length === 1 ? "change" : "changes"}\n${result.changes.map((c) => `  ${c}`).join("\n")}`
+      : `${label}: already normal`;
 
-  if (flags.check) {
-    console.log(report);
-    return result.changes.length ? 1 : 0;
+    if (flags.check) {
+      console.log(report);
+      if (result.changes.length) status = 1;
+    } else if (flags.write) {
+      if (result.changes.length) await writeFile(file, result.output);
+      console.log(report);
+    } else {
+      process.stdout.write(result.output);
+      console.error(report);
+    }
   }
-  if (flags.write) {
-    if (result.changes.length) await writeFile(file, result.output);
-    console.log(report);
-    return 0;
-  }
-  process.stdout.write(result.output);
-  console.error(report);
-  return 0;
+  return status;
 }
 
 async function extract(args: string[]): Promise<number> {

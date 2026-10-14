@@ -117,10 +117,16 @@ describe("release heading grammar", () => {
     );
   });
 
-  it("skips Unreleased silently", () => {
-    const result = validate("## Unreleased\n\nSoon.\n\n## 1.0.0 — 2026-07-09\n\nDone.");
-    expect(result.entryCount).toBe(1);
-    expect(result.diagnostics.map((d) => d.rule)).not.toContain("heading/skipped");
+  it("skips Unreleased silently, bracketed or linked as Keep a Changelog writes it", () => {
+    for (const heading of [
+      "Unreleased",
+      "[Unreleased]",
+      "[Unreleased](https://github.com/acme/kestrel/compare/v1.0.0...HEAD)",
+    ]) {
+      const result = validate(`## ${heading}\n\nSoon.\n\n## 1.0.0 — 2026-07-09\n\nDone.`);
+      expect(result.entryCount).toBe(1);
+      expect(result.diagnostics.map((d) => d.rule)).not.toContain("heading/skipped");
+    }
   });
 
   it("reads a PEP 440 spelling as a title, not a version", () => {

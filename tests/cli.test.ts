@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { loadArchiveChain } from "../src/index.js";
@@ -116,6 +119,28 @@ Final 1.x release.
     expect(run(["normalize", "--check", "-"], source).code).toBe(1);
     expect(run(["normalize", "--check", "-"], out.stdout).code).toBe(0);
     expect(run(["normalize", "--date", "soon", "-"], source).code).toBe(2);
+  });
+
+  it("normalizes several files in place, as a monorepo's packages need", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dc-normalize-"));
+    const needs = `---\nchangelog: "0.1"\n---\n\n# A\n\n## 1.3.0 (2026-10-14)\n\n### Bug Fixes\n\n* a fix\n`;
+    const fine = `---\nchangelog: "0.1"\n---\n\n# B\n\n## 1.0.0 - 2026-10-14\n\n### Fixed\n\n- a fix\n`;
+    const a = join(dir, "a.md");
+    const b = join(dir, "b.md");
+    writeFileSync(a, needs);
+    writeFileSync(b, fine);
+    try {
+      expect(run(["normalize", a, b]).code).toBe(2);
+      expect(run(["normalize", "--check", a, b]).code).toBe(1);
+      const out = run(["normalize", "--write", a, b]);
+      expect(out.code).toBe(0);
+      expect(out.stdout).toContain(`${b}: already normal`);
+      expect(readFileSync(a, "utf8")).toContain("## 1.3.0 - 2026-10-14\n\n### Fixed\n");
+      expect(readFileSync(b, "utf8")).toBe(fine);
+      expect(run(["normalize", "--check", a, b]).code).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 
   it("extracts the latest entry's notes", () => {

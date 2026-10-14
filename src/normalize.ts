@@ -1,4 +1,4 @@
-import { CATEGORIES, type Category } from "./constants.js";
+import { CATEGORIES, type Category, UNRELEASED_RE } from "./constants.js";
 import { parseIsoDate } from "./parse/date.js";
 import { buildModel } from "./parse/document.js";
 import { parseVersion } from "./parse/version.js";
@@ -10,7 +10,8 @@ import { parseVersion } from "./parse/version.js";
  * - **release-please** writes `## [1.3.0](compare) (2026-10-14)`, a heading the
  *   grammar rejects, and files breaking changes under `### ⚠ BREAKING CHANGES`.
  *   When nothing in the file matches its insertion pattern it also writes the
- *   entry above the frontmatter.
+ *   entry above the frontmatter, and when `## [Unreleased]` is the first match
+ *   it writes the entry above that, so Unreleased drifts down the file.
  * - **changesets** writes `## 1.3.0` with no date, which every consumer skips,
  *   and files changes under `### Major/Minor/Patch Changes`. Version 2 inserts
  *   the entry after the file's first line, which is inside the frontmatter.
@@ -177,6 +178,8 @@ function repairSections(
   options: NormalizeOptions,
   changes: string[],
   heading: string,
+  /** Lay the sections out even when nothing in them needs repair: the heading was rewritten. */
+  relayout: boolean,
 ): string[] | undefined {
   const { preamble, sections } = sectionsOf(body);
   if (sections.length === 0) return undefined;
@@ -247,8 +250,8 @@ function repairSections(
   );
   if (merged) local.push("merged repeated sections");
   if (outOfOrder) local.push("sorted sections into canonical order");
-  if (local.length === 0) return undefined;
-  changes.push(`${heading}: ${local.join("; ")}`);
+  if (local.length === 0 && !relayout) return undefined;
+  if (local.length) changes.push(`${heading}: ${local.join("; ")}`);
 
   const out = [...trimBlank(preamble)];
   if (out.length) out.push("");
@@ -297,6 +300,56 @@ function repairFrontmatter(lines: string[], changes: string[]): string[] {
     return [...block, "", ...trimBlank([...lines.slice(0, open), ...lines.slice(close + 1)])];
   }
   return lines;
+}
+
+/**
+ * Moves `## [Unreleased]` back above the entries a tool wrote over it. A tool
+ * that inserts above the first `## [` heading puts each release above
+ * Unreleased; Keep a Changelog keeps Unreleased on top.
+ */
+function hoistUnreleased(lines: string[], changes: string[]): string[] {
+  const model = buildModel(`${lines.join("\n")}\n`, "<normalize>");
+  const conforming = new Set(model.entries.map((entry) => entry.position.line - 1));
+  const start = lines[0] === "---" ? (closeOf(lines, 0) ?? 0) + 1 : 0;
+  const mask = fenced(lines);
+  const headings: number[] = [];
+  for (let i = start; i < lines.length; i++) {
+    if (!mask[i] && /^#{1,2} /.test(lines[i]!)) headings.push(i);
+  }
+  const releases = headings.filter((i) => lines[i]!.startsWith("## "));
+  const unreleased = releases.find((i) => UNRELEASED_RE.test(lines[i]!.slice(3).trim()));
+  if (unreleased === undefined) return lines;
+  // The first entry above it that a tool just wrote, i.e. one that does not conform yet.
+  const firstNew = releases.find((i) => i < unreleased && !conforming.has(i));
+  if (firstNew === undefined) return lines;
+
+  const next = headings.find((i) => i > unreleased) ?? lines.length;
+  let end = next;
+  if (next === lines.length) {
+    // A trailing run of link definitions belongs to the file.
+    while (
+      end > unreleased + 1 &&
+      (lines[end - 1]!.trim() === "" || DEFINITION.test(lines[end - 1]!))
+    )
+      end--;
+  }
+  const block = trimBlank(lines.slice(unreleased, end));
+  const before = trimBlank(lines.slice(firstNew, unreleased));
+  const after = trimBlankStart(lines.slice(end));
+  changes.push(`moved \`${lines[unreleased]}\` back above the new entries`);
+  return [
+    ...lines.slice(0, firstNew),
+    ...block,
+    "",
+    ...before,
+    ...(after.length ? ["", ...after] : []),
+  ];
+}
+
+function trimBlankStart(lines: string[]): string[] {
+  let start = 0;
+  while (start < lines.length && lines[start]!.trim() === "") start++;
+  return lines.slice(start);
 }
 
 /** Puts an entry above the first `## ` heading after the frontmatter, or at the end. */
@@ -352,6 +405,7 @@ export function normalizeChangelog(
     source.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n"),
     changes,
   );
+  lines = hoistUnreleased(lines, changes);
 
   // Which headings already conform, by the validator's own reading.
   const model = buildModel(`${lines.join("\n")}\n`, "<normalize>");
@@ -373,7 +427,7 @@ export function normalizeChangelog(
     const isNew = index < firstConforming;
     if (!isNew && !options.all) continue;
     const text = lines[index]!.slice(3).trim();
-    if (/^\[?unreleased\]?$/i.test(text)) continue;
+    if (UNRELEASED_RE.test(text)) continue;
 
     const local: string[] = [];
     let heading = lines[index]!;
@@ -400,9 +454,15 @@ export function normalizeChangelog(
       while (i > index + 1 && (lines[i - 1]!.trim() === "" || DEFINITION.test(lines[i - 1]!))) i--;
       if (lines.slice(i, end).some((line) => DEFINITION.test(line))) end = i;
     }
-    const repaired = repairSections(lines.slice(index + 1, end), options, local, heading.slice(3));
+    const repaired = repairSections(
+      lines.slice(index + 1, end),
+      options,
+      local,
+      heading.slice(3),
+      heading !== lines[index],
+    );
     if (repaired) {
-      const blank = end < lines.length ? [""] : [];
+      const blank = end < lines.length && lines[end]!.trim() !== "" ? [""] : [];
       out.splice(index + 1, end - index - 1, "", ...trimBlank(repaired), ...blank);
     }
     perEntry.push(local);
