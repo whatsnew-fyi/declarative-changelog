@@ -1,6 +1,7 @@
 import { ALL_TAGS, CHANNEL_LIKE_PRERELEASE } from "../constants.js";
 import type { Diagnostic } from "../diagnostics.js";
 import type { ChangelogModel } from "../parse/document.js";
+import { parseVersion } from "../parse/version.js";
 
 export function checkHeadings(model: ChangelogModel): Diagnostic[] {
   const out: Diagnostic[] = [];
@@ -42,6 +43,20 @@ export function checkHeadings(model: ChangelogModel): Diagnostic[] {
         severity: "info",
         message:
           "Date-only value — it means midnight UTC and is a lossy sort key; a time and offset are recommended",
+        position: entry.position,
+      });
+    }
+
+    // Keep a Changelog's `## [1.2.3] - date` with no `[1.2.3]: url` definition:
+    // CommonMark leaves the brackets as text, so the label is the title
+    // "[1.2.3]" and the release has no version. Nothing errors, and every
+    // consumer loses the version — worth a warning.
+    const bracketed = /^\[([^\]]+)\]$/.exec(entry.title ?? "");
+    if (!entry.version && bracketed && parseVersion(bracketed[1]!)) {
+      out.push({
+        rule: "heading/bracketed-label",
+        severity: "warning",
+        message: `\`${entry.title}\` is a link with no definition, so it reads as a title and the release has no version — add \`${entry.title}: <url>\` below, or write \`## ${entry.title}(<url>)\``,
         position: entry.position,
       });
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parse, validate } from "./helpers.js";
+import { parse, rules, validate } from "./helpers.js";
 
 describe("release heading grammar", () => {
   it("parses all four conformant shapes from the spec", () => {
@@ -67,6 +67,54 @@ describe("release heading grammar", () => {
     const result = validate("## 2.4.0 — 2026-07-09 (special build)\n\nBody.");
     expect(result.entryCount).toBe(0);
     expect(result.diagnostics.map((d) => d.rule)).toContain("heading/candidate-does-not-parse");
+  });
+
+  it("takes a reference-style heading's URL from its definition, Keep a Changelog style", () => {
+    const view = parse(
+      [
+        "## [1.2.0] - 2026-10-13",
+        "",
+        "### Added",
+        "",
+        "- A thing.",
+        "",
+        "## [1.1.0][old] - 2026-09-01",
+        "",
+        "### Fixed",
+        "",
+        "- Another.",
+        "",
+        "[1.2.0]: https://kestrel.example/compare/1.1.0...1.2.0",
+        "[OLD]: https://kestrel.example/releases/1.1.0",
+      ].join("\n"),
+    );
+    expect(view.entries.map((e) => [e.version, e.url])).toEqual([
+      ["1.2.0", "https://kestrel.example/compare/1.1.0...1.2.0"],
+      ["1.1.0", "https://kestrel.example/releases/1.1.0"],
+    ]);
+    expect(
+      validate("## [1.2.0] - 2026-10-13\n\n[1.2.0]: https://x.example/r").addressableEntries,
+    ).toBe(1);
+    // The definitions at the foot sit under the last entry's last section, and
+    // are not its content.
+    const footer = validate(
+      "## [1.2.0] - 2026-10-13\n\n### Added\n\n- A thing.\n\n[1.2.0]: https://x.example/r",
+    );
+    expect(footer.diagnostics.map((d) => d.rule)).not.toContain("entry/section-content");
+    expect(footer.level).toBe(2);
+  });
+
+  it("warns when `[1.2.3]` has no definition, because the release loses its version", () => {
+    const result = validate("## [1.2.0] - 2026-10-13\n\n### Added\n\n- A thing.");
+    expect(result.model.entries[0]!.version).toBeUndefined();
+    expect(result.model.entries[0]!.title).toBe("[1.2.0]");
+    const warning = result.diagnostics.find((d) => d.rule === "heading/bracketed-label");
+    expect(warning?.severity).toBe("warning");
+    expect(warning?.message).toContain("`[1.2.0]: <url>`");
+    // A bracketed title that is not a version is somebody's title.
+    expect(rules("## [Beta] - 2026-10-13\n\n### Added\n\n- A thing.")).not.toContain(
+      "heading/bracketed-label",
+    );
   });
 
   it("skips Unreleased silently", () => {

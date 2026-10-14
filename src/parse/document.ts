@@ -1,6 +1,7 @@
 import type {
   Blockquote,
   Code,
+  Definition,
   Heading,
   List,
   ListItem,
@@ -115,6 +116,7 @@ export function buildModel(source: string, file: string): ChangelogModel {
   };
 
   const children = root.children;
+  const definitions = linkDefinitions(root);
   let index = 0;
 
   const fmNode = children[0];
@@ -164,7 +166,7 @@ export function buildModel(source: string, file: string): ChangelogModel {
     }
     if (node.type === "heading" && node.depth === 2) {
       flushEntry();
-      const result = parseReleaseHeading(node);
+      const result = parseReleaseHeading(node, definitions);
       if (result.kind === "release") {
         current = { heading: node, parsed: result.heading, nodes: [] };
       } else {
@@ -213,6 +215,9 @@ function buildEntry(
   let sawContent = false;
 
   for (const node of nodes) {
+    // A link reference definition renders nothing and belongs to the document:
+    // Keep a Changelog keeps them all at the foot, under the last entry.
+    if (node.type === "definition") continue;
     if (node.type === "code" && (node as Code).lang === "changelog") {
       const code = node as Code;
       if (hatch) {
@@ -400,4 +405,27 @@ function collapse(text: string): string {
 
 export function normalizeVersion(raw: string): string {
   return raw.replace(/^v/, "");
+}
+
+/**
+ * Link reference definitions by identifier (mdast normalizes the case), so a
+ * `## [1.2.3] - date` heading can take its URL from `[1.2.3]: …` at the foot.
+ * The first definition of an identifier wins, as in CommonMark.
+ */
+function linkDefinitions(root: Root): Map<string, string> {
+  const definitions = new Map<string, string>();
+  const walk = (node: { type: string; children?: unknown[] }): void => {
+    if (node.type === "definition") {
+      const definition = node as Definition;
+      if (!definitions.has(definition.identifier)) {
+        definitions.set(definition.identifier, definition.url);
+      }
+      return;
+    }
+    for (const child of node.children ?? []) {
+      walk(child as { type: string; children?: unknown[] });
+    }
+  };
+  walk(root);
+  return definitions;
 }

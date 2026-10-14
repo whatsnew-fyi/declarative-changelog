@@ -1,4 +1,4 @@
-import type { Heading, Link } from "mdast";
+import type { Heading, Link, LinkReference, PhrasingContent } from "mdast";
 import { SEPARATORS, TAG_GRAMMAR_RE } from "../constants.js";
 import { DATE_AT_END_RE, type HeadingDate, parseIsoDate } from "./date.js";
 import { flattenInline } from "./inline.js";
@@ -33,13 +33,39 @@ export type HeadingResult =
       nearMiss?: string;
     };
 
-export function parseReleaseHeading(node: Heading): HeadingResult {
-  const children = node.children;
-  const first = children[0];
-
+/**
+ * The link a heading opens with, if any: an inline `[label](url)`, or a
+ * reference `[label]` / `[label][id]` whose definition the document carries —
+ * Keep a Changelog's own style, `## [1.2.3] - 2026-10-13` with
+ * `[1.2.3]: https://…` at the foot. CommonMark makes `[1.2.3]` a link only when
+ * the definition exists; without one it is literal text, and the label reads
+ * as a title (the rules warn on that).
+ */
+function leadingLink(
+  first: PhrasingContent | undefined,
+  definitions: ReadonlyMap<string, string>,
+): { children: PhrasingContent[]; url: string } | undefined {
   if (first?.type === "link") {
-    // `## [label](url) sep date tags?` — the link carries the whole label-part.
     const link = first as Link;
+    return { children: link.children, url: link.url };
+  }
+  if (first?.type === "linkReference") {
+    const reference = first as LinkReference;
+    const url = definitions.get(reference.identifier);
+    if (url !== undefined) return { children: reference.children, url };
+  }
+  return undefined;
+}
+
+export function parseReleaseHeading(
+  node: Heading,
+  definitions: ReadonlyMap<string, string> = new Map(),
+): HeadingResult {
+  const children = node.children;
+  const link = leadingLink(children[0], definitions);
+
+  if (link) {
+    // `## [label](url) sep date tags?` — the link carries the whole label-part.
     const label = flattenInline(link.children);
     const rest = flattenInline(children.slice(1));
     const text = `${label}${rest}`;
