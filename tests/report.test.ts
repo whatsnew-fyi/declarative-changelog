@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateChangelog } from "../src/index.js";
+import { formatGithub } from "../src/report/github.js";
 import { formatJson } from "../src/report/json.js";
 import { formatPretty } from "../src/report/pretty.js";
 import { doc } from "./helpers.js";
@@ -39,5 +40,35 @@ describe("json reporter", () => {
     expect(report.files).toHaveLength(2);
     expect(report.files[1].counts.error).toBeGreaterThan(0);
     expect(report.summary.error).toBe(report.files[0].counts.error + report.files[1].counts.error);
+  });
+});
+
+describe("github reporter", () => {
+  it("writes one annotation per diagnostic, pinned to the file and line", () => {
+    const out = formatGithub([broken], false);
+    const line = out.split("\n").find((l) => l.includes("heading/unknown-tag"));
+    expect(line).toMatch(
+      /^::error file=broken\.md,line=12,col=1,endLine=12,endColumn=\d+,title=heading\/unknown-tag::Unknown tag `lst`/,
+    );
+    // Info diagnostics become notices, not errors.
+    expect(out).toMatch(/^::notice /m);
+    expect(out).toContain(
+      "broken.md: Level 2 — Categorized, 1 entry · 1 error, 0 warnings, 1 info",
+    );
+  });
+
+  it("escapes what would end a property or a command", () => {
+    const tricky = validateChangelog(doc("## 2.4.0 — 2026-07-09 (lst)\n\nBody."), "a,b:c%.md");
+    const line = formatGithub([tricky], true).split("\n")[0]!;
+    expect(line).toContain("file=a%2Cb%3Ac%25.md");
+    expect(line).not.toContain("\n");
+  });
+
+  it("keeps errors only when quiet, and still summarizes", () => {
+    const out = formatGithub([broken], true);
+    expect(out).not.toMatch(/^::(warning|notice) /m);
+    expect(formatGithub([clean], true)).toBe(
+      "clean.md: Level 2 — Categorized, 1 entry · 0 errors, 0 warnings, 0 info",
+    );
   });
 });

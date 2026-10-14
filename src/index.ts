@@ -14,6 +14,8 @@ export type { Level } from "./conformance.js";
 export { LEVEL_NAMES } from "./conformance.js";
 export type { ConsumerChange, ConsumerEntry, ConsumerView } from "./consumer-view.js";
 export type { Diagnostic, Position, Severity } from "./diagnostics.js";
+export { type Extracted, extractEntry } from "./extract.js";
+export { type NormalizeOptions, type NormalizeResult, normalizeChangelog } from "./normalize.js";
 export type { ChangeItem, ChangelogModel, ReleaseEntry, Section } from "./parse/document.js";
 export { type ChangeReference, reduceChangeItem } from "./parse/reduction.js";
 export { compareVersions, parseVersion } from "./parse/version.js";

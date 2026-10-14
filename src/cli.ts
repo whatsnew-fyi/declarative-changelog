@@ -1,21 +1,28 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
+import { extractEntry } from "./extract.js";
 import {
   loadArchiveChain,
   parseChangelog,
   type ValidationResult,
   validateChangelog,
 } from "./index.js";
+import { normalizeChangelog } from "./normalize.js";
+import { formatGithub } from "./report/github.js";
 import { formatJson } from "./report/json.js";
 import { formatPretty } from "./report/pretty.js";
 
 const USAGE = `Usage:
-  declarative-changelog validate <file...|->  [options]
-  declarative-changelog parse    <file|->     [options]
+  declarative-changelog validate  <file...|->  [options]
+  declarative-changelog parse     <file|->     [options]
+  declarative-changelog normalize <file|->     [options]
+  declarative-changelog extract   <file|->     [version|latest]
 
 Validate options:
-  --format <pretty|json>   Output format (default: pretty)
+  --format <pretty|json|github>
+                           Output format (default: pretty); github writes
+                           workflow annotations for GitHub Actions
   --require-level <1|2>    Fail unless the document reaches this conformance level
   --max-warnings <n>       Fail when more than n warnings are reported
   --follow-older           Fetch the document.older archive chain to resolve superseded-by
@@ -23,6 +30,15 @@ Validate options:
 
 Parse options:
   --compact                Single-line JSON (default: pretty-printed)
+
+Normalize options (repairs what release-please and changesets write):
+  --write                  Rewrite the file in place (default: print it)
+  --check                  Exit 1 if the file needs normalizing; change nothing
+  --date <rfc3339>         Date for new undated entries (default: now, UTC)
+  --all                    Repair every entry, not only the new ones (never re-dates)
+  --keep-sections          Keep changesets' Major/Minor/Patch Changes sections
+
+Extract prints one entry's notes as markdown (default: latest, skipping yanked).
 
 Exit codes: 0 valid · 1 validation failed · 2 usage or internal error`;
 
@@ -37,6 +53,11 @@ async function main(argv: string[]): Promise<number> {
       "follow-older": { type: "boolean", default: false },
       quiet: { type: "boolean", default: false },
       compact: { type: "boolean", default: false },
+      write: { type: "boolean", default: false },
+      check: { type: "boolean", default: false },
+      date: { type: "string" },
+      all: { type: "boolean", default: false },
+      "keep-sections": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "V", default: false },
     },
@@ -56,6 +77,8 @@ async function main(argv: string[]): Promise<number> {
 
   if (command === "validate") return validate(files, values);
   if (command === "parse") return parse(files, values);
+  if (command === "normalize") return normalize(files, values);
+  if (command === "extract") return extract(files);
 
   console.error(`Unknown command \`${command}\`\n\n${USAGE}`);
   return 2;
@@ -68,6 +91,11 @@ interface Flags {
   "follow-older"?: boolean;
   quiet?: boolean;
   compact?: boolean;
+  write?: boolean;
+  check?: boolean;
+  date?: string;
+  all?: boolean;
+  "keep-sections"?: boolean;
 }
 
 async function validate(files: string[], flags: Flags): Promise<number> {
@@ -75,8 +103,8 @@ async function validate(files: string[], flags: Flags): Promise<number> {
     console.error(`validate needs at least one file (or \`-\` for stdin)\n\n${USAGE}`);
     return 2;
   }
-  if (flags.format !== "pretty" && flags.format !== "json") {
-    console.error(`--format must be pretty or json, got \`${flags.format}\``);
+  if (flags.format !== "pretty" && flags.format !== "json" && flags.format !== "github") {
+    console.error(`--format must be pretty, json or github, got \`${flags.format}\``);
     return 2;
   }
   const requireLevel = flags["require-level"] ? Number(flags["require-level"]) : undefined;
@@ -110,8 +138,13 @@ async function validate(files: string[], flags: Flags): Promise<number> {
     results.push(result);
   }
 
+  const quiet = flags.quiet ?? false;
   console.log(
-    flags.format === "json" ? formatJson(results) : formatPretty(results, flags.quiet ?? false),
+    flags.format === "json"
+      ? formatJson(results)
+      : flags.format === "github"
+        ? formatGithub(results, quiet)
+        : formatPretty(results, quiet),
   );
 
   const errors = results.reduce((n, r) => n + r.counts.error, 0);
@@ -130,6 +163,66 @@ async function parse(files: string[], flags: Flags): Promise<number> {
   const source = await read(files[0]!);
   const view = parseChangelog(source, files[0] === "-" ? "<stdin>" : files[0]!);
   console.log(flags.compact ? JSON.stringify(view) : JSON.stringify(view, null, 2));
+  return 0;
+}
+
+async function normalize(files: string[], flags: Flags): Promise<number> {
+  if (files.length !== 1) {
+    console.error(`normalize takes exactly one file (or \`-\` for stdin)\n\n${USAGE}`);
+    return 2;
+  }
+  const file = files[0]!;
+  if (flags.write && file === "-") {
+    console.error("--write needs a file, not stdin");
+    return 2;
+  }
+  const source = await read(file);
+  let result: ReturnType<typeof normalizeChangelog>;
+  try {
+    result = normalizeChangelog(source, {
+      ...(flags.date === undefined ? {} : { date: flags.date }),
+      all: flags.all ?? false,
+      keepSections: flags["keep-sections"] ?? false,
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 2;
+  }
+  const label = file === "-" ? "<stdin>" : file;
+  const report = result.changes.length
+    ? `${label}: ${result.changes.length} ${result.changes.length === 1 ? "change" : "changes"}\n${result.changes.map((c) => `  ${c}`).join("\n")}`
+    : `${label}: already normal`;
+
+  if (flags.check) {
+    console.log(report);
+    return result.changes.length ? 1 : 0;
+  }
+  if (flags.write) {
+    if (result.changes.length) await writeFile(file, result.output);
+    console.log(report);
+    return 0;
+  }
+  process.stdout.write(result.output);
+  console.error(report);
+  return 0;
+}
+
+async function extract(args: string[]): Promise<number> {
+  if (args.length < 1 || args.length > 2) {
+    console.error(`extract takes a file (or \`-\`) and an optional version\n\n${USAGE}`);
+    return 2;
+  }
+  const [file, which = "latest"] = args as [string, string?];
+  const entry = extractEntry(await read(file), which);
+  if (!entry) {
+    console.error(
+      which === "latest"
+        ? `${file}: no release entry to extract`
+        : `${file}: no entry for version \`${which}\``,
+    );
+    return 1;
+  }
+  process.stdout.write(entry.markdown ? `${entry.markdown}\n` : "");
   return 0;
 }
 

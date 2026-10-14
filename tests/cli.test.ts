@@ -6,11 +6,13 @@ import { loadArchiveChain } from "../src/index.js";
 const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
-function run(args: string[]): { stdout: string; code: number } {
+function run(args: string[], input?: string): { stdout: string; code: number } {
   try {
     const stdout = execFileSync(process.execPath, ["--import", "tsx", cli, ...args], {
       encoding: "utf8",
       env: { ...process.env, NO_COLOR: "1" },
+      ...(input === undefined ? {} : { input }),
+      stdio: ["pipe", "pipe", "pipe"],
     });
     return { stdout, code: 0 };
   } catch (error) {
@@ -91,5 +93,36 @@ Final 1.x release.
     const fetchImpl = (async () => new Response("nope", { status: 404 })) as typeof fetch;
     const archive = await loadArchiveChain("https://x.example/gone.md", 5, fetchImpl);
     expect(archive.failures).toHaveLength(1);
+  });
+
+  it("writes GitHub annotations with --format github", () => {
+    const { stdout, code } = run([
+      "validate",
+      "--format",
+      "github",
+      fixture("invalid/tag-typo.md"),
+    ]);
+    expect(code).toBe(1);
+    expect(stdout).toMatch(
+      /^::error file=.*tag-typo\.md,line=\d+,col=\d+.*title=heading\/unknown-tag::/m,
+    );
+  });
+
+  it("normalizes stdin to stdout, and --check fails on a file that needs it", () => {
+    const source = `---\nchangelog: "0.1"\nproduct:\n  name: Kestrel\n---\n\n# Kestrel\n\n## 1.3.0 (2026-10-14)\n\n### Bug Fixes\n\n* a fix\n`;
+    const out = run(["normalize", "-"], source);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("## 1.3.0 - 2026-10-14\n\n### Fixed\n\n- a fix\n");
+    expect(run(["normalize", "--check", "-"], source).code).toBe(1);
+    expect(run(["normalize", "--check", "-"], out.stdout).code).toBe(0);
+    expect(run(["normalize", "--date", "soon", "-"], source).code).toBe(2);
+  });
+
+  it("extracts the latest entry's notes", () => {
+    const { stdout, code } = run(["extract", fixture("valid/kestrel.md")]);
+    expect(code).toBe(0);
+    expect(stdout.length).toBeGreaterThan(0);
+    expect(stdout).not.toMatch(/^## /m);
+    expect(run(["extract", fixture("valid/kestrel.md"), "99.0.0"]).code).toBe(1);
   });
 });
